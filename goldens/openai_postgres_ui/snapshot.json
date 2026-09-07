@@ -8,6 +8,10 @@
     "sha256": "c50490ae2dd0493b87d7a0e1fe0d0913625401a582a0d427045eba6fac562421"
   },
   {
+    "path": ".github/workflows/ci.yml",
+    "sha256": "a69ff045cf5236b4ef3e582a5eabfdf14aa70f031051562a1e0d0ee33d9097be"
+  },
+  {
     "path": ".gitignore",
     "sha256": "98e29d874636f64555c2de108d40c336c7d035790291a18e18951cc4a7793bc4"
   },
