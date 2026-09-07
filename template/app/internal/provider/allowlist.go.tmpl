@@ -1,0 +1,37 @@
+package provider
+
+import (
+	"os"
+	"strings"
+)
+
+// allowedHosts is the SSRF guard: the upstream base_url's host must appear
+// in this list (from LLM_ALLOWED_HOSTS, seeded by config with the provider's
+// default host plus loopback variants). An allowlist — not a blocklist — so
+// unknown hosts fail closed.
+var allowedHosts = map[string]bool{}
+
+// SetAllowedHosts installs the allowlist (called once at startup).
+func SetAllowedHosts(hosts []string) {
+	allowedHosts = map[string]bool{}
+	for _, h := range hosts {
+		h = strings.ToLower(strings.TrimSpace(h))
+		if h != "" {
+			allowedHosts[h] = true
+		}
+	}
+}
+
+// AllowedFromEnv reads LLM_ALLOWED_HOSTS and installs it.
+func AllowedFromEnv() {
+	SetAllowedHosts(strings.Split(os.Getenv("LLM_ALLOWED_HOSTS"), ","))
+}
+
+// HostAllowed reports whether the host of raw URL is allowlisted.
+func HostAllowed(raw string) bool {
+	h := hostOf(raw)
+	if h == "" {
+		return false
+	}
+	return allowedHosts[h]
+}

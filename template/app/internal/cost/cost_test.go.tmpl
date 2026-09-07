@@ -1,0 +1,22 @@
+package cost
+
+import "testing"
+
+func TestCostForKnownModel(t *testing.T) {
+	tbl := DefaultTable()
+	cost, known := tbl.CostFor("gpt-4o-mini", 1_000_000, 1_000_000)
+	if !known {
+		t.Fatal("gpt-4o-mini should be in the embedded table")
+	}
+	if cost < 0.7 || cost > 0.8 {
+		t.Fatalf("1M+1M tokens should cost ~0.75, got %f", cost)
+	}
+}
+
+func TestCostForUnknownModel(t *testing.T) {
+	tbl := DefaultTable()
+	cost, known := tbl.CostFor("totally-made-up-model", 100, 100)
+	if known || cost != 0 {
+		t.Fatalf("unknown model must estimate 0 and be flagged unknown, got %f/%v", cost, known)
+	}
+}

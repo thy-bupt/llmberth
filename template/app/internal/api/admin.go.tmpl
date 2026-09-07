@@ -1,0 +1,211 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"{{.Module}}/internal/keys"
+	"{{.Module}}/internal/store"
+)
+
+// The admin API is the CLI's only channel into the app (plan §2.3): keys and
+// usage live in the app's Postgres, and revocation must invalidate the
+// in-memory cache instantly. It binds loopback (or is published to host
+// loopback only) and requires the ADMIN_TOKEN bearer, fail closed.
+
+type adminKeyView struct {
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	Prefix       string     `json:"prefix"`
+	RateLimitRPS int        `json:"rate_limit_rps"`
+	BudgetUSD    *float64   `json:"budget_usd"`
+	RevokedAt    *time.Time `json:"revoked_at"`
+	CreatedAt    time.Time  `json:"created_at"`
+}
+
+type adminCreateKeyRequest struct {
+	Name         string   `json:"name"`
+	BudgetUSD    *float64 `json:"budget_usd"`
+	RateLimitRPS int      `json:"rate_limit_rps"`
+}
+
+// lookupKey is the cache-miss path for authenticate.
+func (s *Server) lookupKey(hashHex string) (*keys.Key, error) {
+	row, err := s.st.LookupKeyByHash(context.Background(), hashHex)
+	if err != nil || row == nil {
+		return nil, err
+	}
+	return &keys.Key{
+		ID:           row.ID,
+		Name:         row.Name,
+		Prefix:       row.Prefix,
+		Scopes:       row.Scopes,
+		RateLimitRPS: row.RateLimitRPS,
+		BudgetUSD:    row.BudgetUSD,
+		HasBudget:    row.HasBudget,
+		RevokedAt:    row.RevokedAt,
+	}, nil
+}
+
+// overBudget reports whether the key (or the project globally) has burned
+// through its month-to-date budget. Estimates, like all cost figures.
+func (s *Server) overBudget(ctx context.Context, k keys.Key) (bool, error) {
+	if k.HasBudget && k.BudgetUSD > 0 {
+		spent, err := s.st.MonthCostByKey(ctx, k.ID)
+		if err != nil {
+			return false, err
+		}
+		if spent >= k.BudgetUSD {
+			return true, nil
+		}
+	}
+	if s.cfg.BudgetMonthly > 0 {
+		spent, err := s.st.MonthCostAll(ctx)
+		if err != nil {
+			return false, err
+		}
+		if spent >= s.cfg.BudgetMonthly {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (s *Server) handleAdminHealth(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "provider": s.provider.Name()})
+}
+
+// handleAdminListKeys returns non-secret key metadata.
+func (s *Server) handleAdminListKeys(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.st.ListKeys(r.Context())
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	out := make([]adminKeyView, 0, len(rows))
+	for _, row := range rows {
+		v := adminKeyView{
+			ID: row.ID, Name: row.Name, Prefix: row.Prefix,
+			RateLimitRPS: row.RateLimitRPS, RevokedAt: row.RevokedAt, CreatedAt: row.CreatedAt,
+		}
+		if row.HasBudget {
+			b := row.BudgetUSD
+			v.BudgetUSD = &b
+		}
+		out = append(out, v)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleAdminCreateKey mints a key. The full key appears exactly once in
+// this response and is never persisted (only hash + prefix are stored).
+func (s *Server) handleAdminCreateKey(w http.ResponseWriter, r *http.Request) {
+	var req adminCreateKeyRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+		apiError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		return
+	}
+
+	full, prefix, err := keys.Generate()
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, "internal", "key generation failed")
+		return
+	}
+	rps := req.RateLimitRPS
+	if rps <= 0 {
+		rps = int(s.cfg.RateLimitRPS)
+	}
+	hasBudget := req.BudgetUSD != nil && *req.BudgetUSD > 0
+	var budget float64
+	if hasBudget {
+		budget = *req.BudgetUSD
+	}
+	id, err := s.st.CreateKey(r.Context(), keys.Hash(full), prefix, req.Name, rps, budget, hasBudget)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	_ = s.st.RecordAudit(r.Context(), "admin", "key.create", prefix, map[string]any{"id": id})
+	slog.Info("key created", "prefix", prefix, "name", req.Name)
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"id":      id,
+		"prefix":  prefix,
+		"key":     full, // shown exactly once
+		"warning": "store this key now — it is never displayed again",
+	})
+}
+
+// handleAdminRevokeKey revokes and immediately invalidates the cache so the
+// very next request with that key is rejected (plan §4.2 acceptance).
+func (s *Server) handleAdminRevokeKey(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	row, err := s.st.GetKeyByID(r.Context(), id)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	if row == nil {
+		apiError(w, http.StatusNotFound, "not_found", "no such key")
+		return
+	}
+	revoked, err := s.st.RevokeKey(r.Context(), id)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	s.cache.Invalidate(row.Hash)
+	_ = s.st.RecordAudit(r.Context(), "admin", "key.revoke", row.Prefix, map[string]any{"id": id})
+	slog.Info("key revoked", "prefix", row.Prefix)
+
+	if !revoked {
+		writeJSON(w, http.StatusOK, map[string]any{"id": id, "already_revoked": true})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "revoked": true})
+}
+
+// handleAdminUsage returns the usage aggregate (estimates).
+func (s *Server) handleAdminUsage(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	by := q.Get("by") // "", "key", "model"
+	if by != "" && by != "key" && by != "model" {
+		apiError(w, http.StatusBadRequest, "bad_request", "by must be key or model")
+		return
+	}
+	since := time.Now().AddDate(0, 0, -30)
+	if v := q.Get("since"); v != "" {
+		parsed, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, "bad_request", "since must be RFC3339")
+			return
+		}
+		since = parsed
+	}
+	points, err := s.st.UsageAggregate(r.Context(), by, since, 200)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	if points == nil {
+		points = make([]store.UsagePoint, 0)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"by":          by,
+		"since":       since.Format(time.RFC3339),
+		"points":      points,
+		"note":        "cost figures are estimates (models.yaml price table)",
+		"month_spend": s.monthSpend(r),
+	})
+}
+
+func (s *Server) monthSpend(r *http.Request) float64 {
+	spent, err := s.st.MonthCostAll(r.Context())
+	if err != nil {
+		return 0
+	}
+	return spent
+}

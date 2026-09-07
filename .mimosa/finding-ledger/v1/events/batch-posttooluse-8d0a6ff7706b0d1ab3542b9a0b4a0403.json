@@ -1,0 +1,144 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "posttooluse-8d0a6ff7706b0d1ab3542b9a0b4a0403",
+  "runId": null,
+  "runStatus": "completed",
+  "coverage": {
+    "status": "complete",
+    "reasons": []
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "PostToolUse"
+  },
+  "revision": null,
+  "diffHash": null,
+  "rulesVersion": null,
+  "sessionHash": "cb0b3a5fb6290bee77ccdf523b72b8e80510f3cd07089bdb1ee08fc232b09075",
+  "reportRef": null,
+  "events": [
+    {
+      "eventId": "hook-ad6d17d515bdc86c01c1e3c4c40dc5d3",
+      "findingId": "mimosa-193b3163d4b6bb6b7c785862",
+      "type": "static_fix_verified",
+      "at": "2026-09-07T18:15:41.529Z",
+      "identity": {
+        "projectRelativeFile": "cmd/llmberth/init.go",
+        "ruleId": "security",
+        "codeEvidenceHash": "d10b36aa74a59bcf4a88185837f658afaf3646eff2bb16c3928d0e9335e945d2",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 160,
+      "endLine": 160,
+      "reasonCode": "static_rescan_passed",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "observed",
+        "producer": "deterministic",
+        "evidenceHash": "d10b36aa74a59bcf4a88185837f658afaf3646eff2bb16c3928d0e9335e945d2"
+      },
+      "sequence": 0
+    },
+    {
+      "eventId": "hook-58e4355e8d9220bc0ef3d00da90338e1",
+      "findingId": "mimosa-19f9b3dedbb503f3659dc2ac",
+      "type": "static_fix_verified",
+      "at": "2026-09-07T18:15:41.529Z",
+      "identity": {
+        "projectRelativeFile": "cmd/llmberth/init.go",
+        "ruleId": "security",
+        "codeEvidenceHash": "2e90aec771b3a3ad040989ee497874a464ef79bd7bab9bc3c3ab48b2ee115947",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 151,
+      "endLine": 151,
+      "reasonCode": "static_rescan_passed",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "observed",
+        "producer": "deterministic",
+        "evidenceHash": "2e90aec771b3a3ad040989ee497874a464ef79bd7bab9bc3c3ab48b2ee115947"
+      },
+      "sequence": 1
+    },
+    {
+      "eventId": "hook-8b7f521006ab28cc2b401e1a82dfc335",
+      "findingId": "mimosa-313c0d586152e3eb6e570db0",
+      "type": "static_fix_verified",
+      "at": "2026-09-07T18:15:41.529Z",
+      "identity": {
+        "projectRelativeFile": "cmd/llmberth/init.go",
+        "ruleId": "security",
+        "codeEvidenceHash": "f2964e4e55e7bea3b73cba8d796144a2021b94b6230e906662d866c7cac68fd8",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 156,
+      "endLine": 156,
+      "reasonCode": "static_rescan_passed",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "observed",
+        "producer": "deterministic",
+        "evidenceHash": "f2964e4e55e7bea3b73cba8d796144a2021b94b6230e906662d866c7cac68fd8"
+      },
+      "sequence": 2
+    },
+    {
+      "eventId": "hook-89608e30ff32b69151a611c069a4cf3a",
+      "findingId": "mimosa-156f3e93e210037cdd99565b",
+      "type": "static_fix_verified",
+      "at": "2026-09-07T18:15:41.529Z",
+      "identity": {
+        "projectRelativeFile": "cmd/llmberth/init.go",
+        "ruleId": "security",
+        "codeEvidenceHash": "b922043d48518bfadf34a92ad23cb909f208dd922deb42a8cd531b1b8bee62c1",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 161,
+      "endLine": 161,
+      "reasonCode": "static_rescan_passed",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "observed",
+        "producer": "deterministic",
+        "evidenceHash": "b922043d48518bfadf34a92ad23cb909f208dd922deb42a8cd531b1b8bee62c1"
+      },
+      "sequence": 3
+    },
+    {
+      "eventId": "hook-0b729671f3d752d51417dadeb133ff4e",
+      "findingId": "mimosa-f1220b321f59ec9b910dbb96",
+      "type": "static_fix_verified",
+      "at": "2026-09-07T18:15:41.529Z",
+      "identity": {
+        "projectRelativeFile": "cmd/llmberth/init.go",
+        "ruleId": "security",
+        "codeEvidenceHash": "5b38f438f382c19f3268503d13c658788810b3e965f5680b77a33557d963ae6f",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 172,
+      "endLine": 172,
+      "reasonCode": "static_rescan_passed",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "observed",
+        "producer": "deterministic",
+        "evidenceHash": "5b38f438f382c19f3268503d13c658788810b3e965f5680b77a33557d963ae6f"
+      },
+      "sequence": 4
+    }
+  ],
+  "observedFindingIds": [],
+  "verifiedFiles": [],
+  "recordedAt": "2026-09-07T18:15:41.709Z"
+}

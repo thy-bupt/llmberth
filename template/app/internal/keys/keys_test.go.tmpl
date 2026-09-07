@@ -1,0 +1,45 @@
+package keys
+
+import "testing"
+
+func TestGenerateAndVerify(t *testing.T) {
+	full, prefix, err := Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(full) < 45 || prefix[:8] != Prefix[:8] {
+		t.Fatalf("malformed key %q / %q", full, prefix)
+	}
+	h := Hash(full)
+	if !Verify(full, h) {
+		t.Fatal("Verify rejected its own hash")
+	}
+	if Verify(full+"x", h) {
+		t.Fatal("Verify accepted tampered key")
+	}
+}
+
+func TestExtractBearer(t *testing.T) {
+	if _, ok := ExtractBearer("Bearer sk-xxx"); ok {
+		t.Fatal("foreign prefix accepted")
+	}
+	if _, ok := ExtractBearer("Basic lbt_live_aaaaaaaaaa"); ok {
+		t.Fatal("non-bearer accepted")
+	}
+	raw, ok := ExtractBearer("Bearer lbt_live_abc")
+	if !ok || raw != "lbt_live_abc" {
+		t.Fatalf("valid key rejected: %q %v", raw, ok)
+	}
+}
+
+func TestCacheInvalidation(t *testing.T) {
+	c := NewCache()
+	c.PutByHash(Hash("k"), Key{ID: "1"})
+	if _, ok := c.GetByHash(Hash("k")); !ok {
+		t.Fatal("put failed")
+	}
+	c.Invalidate(Hash("k"))
+	if _, ok := c.GetByHash(Hash("k")); ok {
+		t.Fatal("invalidate failed — revocation would not take effect")
+	}
+}

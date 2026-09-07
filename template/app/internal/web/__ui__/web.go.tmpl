@@ -1,0 +1,23 @@
+// Package web serves the bundled single-page chat UI. This package is only
+// generated when the init option ui=single-page. Scripts are external files
+// (no inline JS) so the Content-Security-Policy stays strict.
+package web
+
+import "embed"
+
+//go:embed static
+var staticFS embed.FS
+
+// Index returns the bundled index.html.
+func Index() []byte {
+	b, err := staticFS.ReadFile("static/index.html")
+	if err != nil {
+		return []byte("<!doctype html><title>llmberth</title><p>UI asset missing</p>")
+	}
+	return b
+}
+
+// Asset returns a named static asset (e.g. "static/app.js").
+func Asset(name string) ([]byte, error) {
+	return staticFS.ReadFile(name)
+}

@@ -1,0 +1,110 @@
+// {{.Name}} bundled UI logic — external file, strict CSP compatible.
+(function () {
+  'use strict';
+
+  var chat = document.getElementById('chat');
+  var promptEl = document.getElementById('prompt');
+  var sendBtn = document.getElementById('send');
+  var keyInput = document.getElementById('key');
+  var keyStatus = document.getElementById('keyStatus');
+
+  function getKey() {
+    try { return localStorage.getItem('llmberth.key') || ''; } catch (e) { return ''; }
+  }
+  function setKey(k) {
+    try { localStorage.setItem('llmberth.key', k); } catch (e) { /* private mode */ }
+  }
+
+  function addMsg(role, text) {
+    var div = document.createElement('div');
+    div.className = 'msg ' + role;
+    div.textContent = text;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+    return div;
+  }
+
+  keyInput.value = getKey();
+  document.getElementById('keyForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    setKey(keyInput.value.trim());
+    keyStatus.textContent = 'saved ✓';
+    setTimeout(function () { keyStatus.textContent = ''; }, 1500);
+  });
+
+  function send() {
+    var content = promptEl.value.trim();
+    if (!content) return;
+    var key = getKey();
+    if (!key) {
+      addMsg('error', 'Save an API key first.');
+      return;
+    }
+    addMsg('user', content);
+    promptEl.value = '';
+    sendBtn.disabled = true;
+    var reply = addMsg('assistant', '…');
+
+    fetch('/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + key
+      },
+      body: JSON.stringify({
+        model: '{{.Provider.DefaultModel}}',
+        messages: [{ role: 'user', content: content }],
+        stream: true
+      })
+    }).then(function (resp) {
+      if (!resp.ok) {
+        return resp.json().catch(function () { return {}; }).then(function (body) {
+          throw new Error((body.error && body.error.message) || ('HTTP ' + resp.status));
+        });
+      }
+      var reader = resp.body.getReader();
+      var decoder = new TextDecoder();
+      var buf = '';
+      var text = '';
+      function pump() {
+        return reader.read().then(function (chunk) {
+          if (chunk.done) {
+            if (!text) reply.textContent = '(empty response)';
+            sendBtn.disabled = false;
+            promptEl.focus();
+            return;
+          }
+          buf += decoder.decode(chunk.value, { stream: true });
+          var lines = buf.split('\n');
+          buf = lines.pop();
+          lines.forEach(function (line) {
+            if (line.indexOf('data:') !== 0) return;
+            var payload = line.slice(5).trim();
+            if (!payload || payload === '[DONE]') return;
+            try {
+              var obj = JSON.parse(payload);
+              var delta = obj.choices && obj.choices[0] && obj.choices[0].delta;
+              if (delta && delta.content) {
+                text += delta.content;
+                reply.textContent = text;
+                chat.scrollTop = chat.scrollHeight;
+              }
+            } catch (e) { /* skip malformed chunk */ }
+          });
+          return pump();
+        });
+      }
+      return pump();
+    }).catch(function (err) {
+      reply.className = 'msg error';
+      reply.textContent = 'Error: ' + err.message;
+      sendBtn.disabled = false;
+    });
+  }
+
+  document.getElementById('chatForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    send();
+  });
+  promptEl.focus();
+})();

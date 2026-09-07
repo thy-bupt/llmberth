@@ -1,0 +1,25 @@
+# Binaries
+/llmberth
+/dist/
+*.test
+*.out
+
+# Go
+/vendor/
+
+# Local env — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Admin token (generated per-project by llmberth init)
+.llmberth-admin-token
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Golden test scratch output
+/.goldenbin/

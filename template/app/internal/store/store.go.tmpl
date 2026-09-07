@@ -1,0 +1,85 @@
+// Package store owns the Postgres connection, embedded migrations and the
+// typed queries used by the API. The ledger, key and audit tables are
+// append-only at the application level (and at the role level in prod).
+package store
+
+import (
+	"context"
+	"embed"
+	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
+
+// Store wraps the pgx pool; query helpers attach here.
+type Store struct {
+	Pool *pgxpool.Pool
+}
+
+// New opens the pool and runs the embedded migrations to the latest version.
+func New(ctx context.Context, databaseURL string) (*Store, error) {
+	if err := runMigrations(databaseURL); err != nil {
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+
+	cfg, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse database url: %w", err)
+	}
+	cfg.MaxConns = 8
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("connect: %w", err)
+	}
+	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := pool.Ping(pingCtx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("ping: %w", err)
+	}
+	return &Store{Pool: pool}, nil
+}
+
+func runMigrations(databaseURL string) error {
+	src, err := iofs.New(migrationsFS, "migrations")
+	if err != nil {
+		return fmt.Errorf("migration source: %w", err)
+	}
+	m, err := migrate.NewWithSourceInstance("iofs", src, "pgx5://"+stripScheme(databaseURL))
+	if err != nil {
+		return err
+	}
+	defer m.Close() //nolint:errcheck // migrator close error is not actionable
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return err
+	}
+	slog.Info("migrations applied")
+	return nil
+}
+
+func (s *Store) Close() {
+	if s != nil && s.Pool != nil {
+		s.Pool.Close()
+	}
+}
+
+// stripScheme converts a standard postgres URL to the scheme golang-migrate's
+// pgx5 driver registers ("pgx5://...").
+func stripScheme(databaseURL string) string {
+	for _, p := range []string{"postgres://", "postgresql://"} {
+		if strings.HasPrefix(databaseURL, p) {
+			return databaseURL[len(p):]
+		}
+	}
+	return databaseURL
+}

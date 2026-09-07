@@ -1,0 +1,143 @@
+// Package config loads the application configuration from the environment.
+// Every knob has a secure default: the app binds the public API on
+// 127.0.0.1:8080 and the admin API on 127.0.0.1:8090, message bodies are not
+// logged, and the upstream base_url is checked against an allowlist.
+package config
+
+import (
+	"fmt"
+	"log/slog"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+)
+
+type Config struct {
+	Port      string // public API listen addr
+	AdminPort string // loopback admin API listen addr
+
+	DatabaseURL string
+	AdminToken  string // bearer token for /admin/* (loopback only)
+
+	// Upstream LLM access (OpenAI-compatible).
+	Provider    string // "fake" uses the built-in no-network provider
+	BaseURL     string // e.g. https://api.openai.com/v1
+	APIKey      string
+	Model       string
+	AllowedHosts []string // allowlist for BaseURL hosts (SSRF guard)
+
+	// Governance.
+	RateLimitRPS   float64 // default per-key requests/sec
+	BudgetMonthly  float64 // global monthly budget, USD (0 = disabled)
+	CORSOrigins    []string
+	LogMessages    bool // opt-in logging of message bodies (off by default)
+	Env            string
+}
+
+func Load() (Config, error) {
+	c := Config{
+		Port:      getenv("PORT", "127.0.0.1:8080"),
+		AdminPort: getenv("ADMIN_PORT", "127.0.0.1:8090"),
+
+		DatabaseURL: os.Getenv("DATABASE_URL"),
+		AdminToken:  os.Getenv("ADMIN_TOKEN"),
+
+		Provider:    getenv("LLM_PROVIDER", "{{.Provider.ID}}"),
+		BaseURL:     getenv("LLM_BASE_URL", "{{.Provider.BaseURL}}"),
+		APIKey:      getenv("{{if .Provider.APIKeyEnv}}{{.Provider.APIKeyEnv}}{{else}}UPSTREAM_API_KEY{{end}}", ""),
+		Model:       getenv("LLM_MODEL", "{{.Provider.DefaultModel}}"),
+
+		RateLimitRPS:  getFloat("RATE_LIMIT_RPS", 5),
+		BudgetMonthly: getFloat("BUDGET_MONTHLY_USD", {{printf "%.2f" .Manifest.Budget.MonthlyUSD}}),
+		Env:           getenv("APP_ENV", "dev"),
+		LogMessages:   getBool("LOG_MESSAGES", false),
+	}
+
+	origins := getenv("CORS_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080")
+	c.CORSOrigins = strings.Split(origins, ",")
+
+	hosts := getenv("LLM_ALLOWED_HOSTS", defaultHosts(c.BaseURL))
+	c.AllowedHosts = strings.Split(hosts, ",")
+	for i := range c.AllowedHosts {
+		c.AllowedHosts[i] = strings.ToLower(strings.TrimSpace(c.AllowedHosts[i]))
+	}
+
+	if c.DatabaseURL == "" {
+		return Config{}, fmt.Errorf("DATABASE_URL is required (see .env.example)")
+	}
+	if c.AdminToken == "" {
+		return Config{}, fmt.Errorf("ADMIN_TOKEN is required (admin API refuses to start without it: fail closed)")
+	}
+	return c, nil
+}
+
+func (c Config) LogLevel() slog.Level {
+	if c.Env == "dev" {
+		return slog.LevelDebug
+	}
+	return slog.LevelInfo
+}
+
+// defaultHosts seeds the SSRF allowlist with the configured upstream host
+// plus loopback variants for self-hosted providers.
+func defaultHosts(baseURL string) string {
+	hosts := map[string]bool{}
+	if h := hostOf(baseURL); h != "" {
+		hosts[h] = true
+	}
+	hosts["127.0.0.1"] = true
+	hosts["localhost"] = true
+	out := make([]string, 0, len(hosts))
+	for h := range hosts {
+		out = append(out, h)
+	}
+	return strings.Join(out, ",")
+}
+
+// hostOf extracts the lowercase hostname of a URL-ish string; "" when it
+// cannot be parsed.
+func hostOf(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "http://" + raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
+}
+
+func getenv(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
+}
+
+func getFloat(k string, def float64) float64 {
+	v := os.Getenv(k)
+	if v == "" {
+		return def
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return def
+	}
+	return f
+}
+
+func getBool(k string, def bool) bool {
+	v := os.Getenv(k)
+	if v == "" {
+		return def
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return def
+	}
+	return b
+}

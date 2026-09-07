@@ -1,0 +1,51 @@
+// Package cost estimates request cost from token usage using the bundled
+// price table (models.yaml, USD per 1M tokens). All displayed costs are
+// ESTIMATES — every surface (headers, CLI, TUI) must label them as such.
+package cost
+
+import (
+	"embed"
+	"fmt"
+
+	"gopkg.in/yaml.v3"
+)
+
+//go:embed models.yaml
+var priceFS embed.FS
+
+// Table maps model name -> per-1M-token prices.
+type Table struct {
+	Models map[string]ModelPrice `yaml:"models"`
+}
+
+// ModelPrice is USD per 1M tokens.
+type ModelPrice struct {
+	Input  float64 `yaml:"input"`
+	Output float64 `yaml:"output"`
+}
+
+// DefaultTable loads the embedded price table.
+func DefaultTable() *Table {
+	t := &Table{Models: map[string]ModelPrice{}}
+	data, err := priceFS.ReadFile("models.yaml")
+	if err != nil {
+		return t // empty table: everything costs 0 (and is flagged unknown)
+	}
+	_ = yaml.Unmarshal(data, t)
+	return t
+}
+
+// CostFor returns the estimated cost in USD and whether the model was found
+// in the table (unknown models estimate to 0 and must be labeled unknown).
+func (t *Table) CostFor(model string, promptTokens, completionTokens int64) (float64, bool) {
+	p, ok := t.Models[model]
+	if !ok {
+		return 0, false
+	}
+	return p.Input*float64(promptTokens)/1e6 + p.Output*float64(completionTokens)/1e6, true
+}
+
+// FormatUSD renders an estimate with the estimate marker callers need.
+func FormatUSD(v float64) string {
+	return fmt.Sprintf("$%.6f (estimate)", v)
+}

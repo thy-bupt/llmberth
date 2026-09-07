@@ -1,0 +1,45 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - gosec
+    - errorlint
+    - revive
+    - copyloopvar
+    - misspell
+    - unconvert
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Print
+        - fmt.Printf
+        - fmt.Println
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+  exclusions:
+    rules:
+      # Template rendering tests legitimately construct paths from template options.
+      - path: _test\.go
+        linters:
+          - gosec
+      # G101 fires on env-var NAME constants and provider preset tables
+      # ("OPENAI_API_KEY" etc.) — this CLI manages credentials, none of these
+      # are credential literals (§5.8 discipline is enforced by gitleaks).
+      - linters:
+          - gosec
+        text: "G101"
+      # Manifest paths come from the CLI's own project discovery; the
+      # manifest itself is secret-free by schema.
+      - path: internal/scaffold/(manifest|util)\.go
+        linters:
+          - gosec
+        text: "G304|G306"
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

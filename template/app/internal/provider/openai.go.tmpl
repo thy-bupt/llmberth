@@ -1,0 +1,205 @@
+package provider
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+)
+
+// OpenAI talks to any OpenAI-compatible upstream (OpenAI, DeepSeek, Qwen,
+// vLLM, Ollama's /v1) using base_url + api key. base_url must already have
+// been validated against the SSRF allowlist by NewOpenAI's caller.
+type OpenAI struct {
+	BaseURL string
+	APIKey  string
+	HTTP    *http.Client
+}
+
+// NewOpenAI builds the client with a sane default timeout.
+func NewOpenAI(baseURL, apiKey string) (*OpenAI, error) {
+	if !HostAllowed(baseURL) {
+		return nil, fmt.Errorf("upstream host %q is not in the allowlist (SSRF guard, see LLM_ALLOWED_HOSTS)", hostOf(baseURL))
+	}
+	return &OpenAI{
+		BaseURL: strings.TrimRight(baseURL, "/"),
+		APIKey:  apiKey,
+		HTTP:    &http.Client{Timeout: 120 * time.Second},
+	}, nil
+}
+
+func (o *OpenAI) Name() string { return "openai-compatible" }
+
+type wireMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type wireRequest struct {
+	Model         string        `json:"model"`
+	Messages      []wireMessage `json:"messages"`
+	Stream        bool          `json:"stream"`
+	StreamOptions *struct {
+		IncludeUsage bool `json:"include_usage"`
+	} `json:"stream_options,omitempty"`
+}
+
+type wireUsage struct {
+	PromptTokens     int64 `json:"prompt_tokens"`
+	CompletionTokens int64 `json:"completion_tokens"`
+}
+
+type wireChoice struct {
+	Message struct {
+		Content string `json:"content"`
+	} `json:"message"`
+	Delta struct {
+		Content string `json:"content"`
+	} `json:"delta"`
+	FinishReason *string `json:"finish_reason"`
+}
+
+type wireResponse struct {
+	ID      string       `json:"id"`
+	Model   string       `json:"model"`
+	Choices []wireChoice `json:"choices"`
+	Usage   wireUsage    `json:"usage"`
+	Error   *struct {
+		Message string `json:"message"`
+		Type    string `json:"type"`
+	} `json:"error"`
+}
+
+func (o *OpenAI) ChatComplete(ctx context.Context, req ChatRequest) (ChatResponse, error) {
+	resp, err := o.post(ctx, req, false)
+	if err != nil {
+		return ChatResponse{}, err
+	}
+	defer resp.Body.Close() //nolint:revive
+
+	if resp.StatusCode != http.StatusOK {
+		return ChatResponse{}, upstreamError(resp)
+	}
+	var wire wireResponse
+	if err := json.NewDecoder(resp.Body).Decode(&wire); err != nil {
+		return ChatResponse{}, fmt.Errorf("decode upstream response: %w", err)
+	}
+	if wire.Error != nil {
+		return ChatResponse{}, fmt.Errorf("upstream: %s", wire.Error.Message)
+	}
+	content := ""
+	if len(wire.Choices) > 0 {
+		content = wire.Choices[0].Message.Content
+	}
+	return ChatResponse{
+		ID:      wire.ID,
+		Model:   wire.Model,
+		Content: content,
+		Usage:   Usage(wire.Usage),
+	}, nil
+}
+
+func (o *OpenAI) StreamChat(ctx context.Context, req ChatRequest) (<-chan StreamDelta, error) {
+	resp, err := o.post(ctx, req, true)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		defer resp.Body.Close() //nolint:revive
+		return nil, upstreamError(resp)
+	}
+
+	out := make(chan StreamDelta, 16)
+	go func() {
+		defer close(out)
+		defer resp.Body.Close() //nolint:revive
+		sc := bufio.NewScanner(resp.Body)
+		sc.Buffer(make([]byte, 64*1024), 1024*1024)
+		for sc.Scan() {
+			line := sc.Text()
+			if !strings.HasPrefix(line, "data:") {
+				continue
+			}
+			payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			if payload == "" || payload == "[DONE]" {
+				if payload == "[DONE]" {
+					return
+				}
+				continue
+			}
+			var wire wireResponse
+			if err := json.Unmarshal([]byte(payload), &wire); err != nil {
+				out <- StreamDelta{Err: fmt.Errorf("decode stream chunk: %w", err)}
+				return
+			}
+			if wire.Error != nil {
+				out <- StreamDelta{Err: fmt.Errorf("upstream: %s", wire.Error.Message)}
+				return
+			}
+			delta := StreamDelta{}
+			if len(wire.Choices) > 0 {
+				delta.Text = wire.Choices[0].Delta.Content
+			}
+			if wire.Usage.PromptTokens > 0 || wire.Usage.CompletionTokens > 0 {
+				u := Usage(wire.Usage)
+				delta.Usage = &u
+			}
+			out <- delta
+		}
+		if err := sc.Err(); err != nil {
+			out <- StreamDelta{Err: fmt.Errorf("read stream: %w", err)}
+		}
+	}()
+	return out, nil
+}
+
+func (o *OpenAI) post(ctx context.Context, req ChatRequest, stream bool) (*http.Response, error) {
+	wire := wireRequest{Model: req.Model, Stream: stream}
+	for _, m := range req.Messages {
+		wire.Messages = append(wire.Messages, wireMessage{Role: m.Role, Content: m.Content})
+	}
+	if stream {
+		wire.StreamOptions = &struct {
+			IncludeUsage bool `json:"include_usage"`
+		}{IncludeUsage: true}
+	}
+	body, err := json.Marshal(wire)
+	if err != nil {
+		return nil, err
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, o.BaseURL+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if o.APIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+o.APIKey)
+	}
+	return o.HTTP.Do(httpReq)
+}
+
+func upstreamError(resp *http.Response) error {
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024))
+	return fmt.Errorf("upstream %s: %s", resp.Status, strings.TrimSpace(string(body)))
+}
+
+// hostOf returns the lowercase host of a URL-ish string.
+func hostOf(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "http://" + raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
+}

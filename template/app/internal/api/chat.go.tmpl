@@ -1,0 +1,231 @@
+package api
+
+import (
+	"context"
+	"crypto/subtle"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"{{.Module}}/internal/keys"
+	"{{.Module}}/internal/provider"
+)
+
+type ctxKey int
+
+const keyCtxKey ctxKey = 1
+
+func withKey(ctx context.Context, k keys.Key) context.Context {
+	return context.WithValue(ctx, keyCtxKey, k)
+}
+
+func keyFromContext(ctx context.Context) (keys.Key, bool) {
+	k, ok := ctx.Value(keyCtxKey).(keys.Key)
+	return k, ok
+}
+
+func constantTimeEqual(a, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
+// chatCompletionRequest is the OpenAI-compatible request subset.
+type chatCompletionRequest struct {
+	Model    string             `json:"model"`
+	Messages []provider.Message `json:"messages"`
+	Stream   bool               `json:"stream"`
+	// llmberth_session groups turns for the bundled UI (non-standard,
+	// optional, ignored by plain OpenAI SDKs).
+	LLMberthSession string `json:"llmberth_session,omitempty"`
+}
+
+type choice struct {
+	Index        int              `json:"index"`
+	Message      provider.Message `json:"message"`
+	FinishReason string           `json:"finish_reason"`
+}
+
+// chatCompletionResponse is the OpenAI-compatible response shape.
+type chatCompletionResponse struct {
+	ID      string  `json:"id"`
+	Object  string  `json:"object"`
+	Created int64   `json:"created"`
+	Model   string  `json:"model"`
+	Choices []choice `json:"choices"`
+	Usage   provider.Usage `json:"usage"`
+}
+
+// Hard guardrail (§5.5): cap total accepted input characters per request.
+const maxInputChars = 64 * 1024
+
+// handleChatCompletions implements POST /v1/chat/completions (stream and
+// non-stream). On completion it appends the usage ledger row and exposes the
+// estimated cost in the X-LLM-Cost-Usd response header.
+func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
+	var req chatCompletionRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(&req); err != nil {
+		apiError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		return
+	}
+	if len(req.Messages) == 0 {
+		apiError(w, http.StatusBadRequest, "bad_request", "messages must not be empty")
+		return
+	}
+	inputLen := 0
+	for _, m := range req.Messages {
+		inputLen += len(m.Content)
+	}
+	if inputLen > maxInputChars {
+		apiError(w, http.StatusRequestEntityTooLarge, "input_too_large", "total input exceeds the configured limit")
+		return
+	}
+
+	k, _ := keyFromContext(r.Context())
+	if over, err := s.overBudget(r.Context(), k); err != nil {
+		slog.Error("budget check", "err", err)
+	} else if over {
+		apiError(w, http.StatusTooManyRequests, "budget_exhausted", "spend limit reached for this key or the project")
+		return
+	}
+
+	model := req.Model
+	if model == "" {
+		model = s.cfg.Model
+	}
+	preq := provider.ChatRequest{Model: model, Messages: req.Messages}
+	s.reqTotal.Add(1)
+
+	if req.Stream {
+		s.streamChat(w, r, preq, k)
+		return
+	}
+
+	resp, err := s.provider.ChatComplete(r.Context(), preq)
+	if err != nil {
+		slog.Error("upstream", "err", err)
+		apiError(w, http.StatusBadGateway, "upstream", err.Error())
+		return
+	}
+	costUSD, known := s.cost.CostFor(model, resp.Usage.PromptTokens, resp.Usage.CompletionTokens)
+	s.record(r, k, model, resp.Usage, costUSD, lastUserText(req.Messages), resp.Content)
+
+	w.Header().Set("X-LLM-Cost-Usd", strconv.FormatFloat(costUSD, 'f', 6, 64))
+	if !known {
+		w.Header().Set("X-LLM-Cost-Estimate", "unknown-model")
+	}
+	out := chatCompletionResponse{
+		ID:      orDefault(resp.ID, "chatcmpl-gen"),
+		Object:  "chat.completion",
+		Created: time.Now().Unix(),
+		Model:   resp.Model,
+		Usage:   resp.Usage,
+	}
+	out.Choices = append(out.Choices, choice{
+		Index:        0,
+		Message:      provider.Message{Role: "assistant", Content: resp.Content},
+		FinishReason: "stop",
+	})
+	writeJSON(w, http.StatusOK, out)
+}
+
+// streamChat forwards the upstream SSE stream, accumulates usage and appends
+// the ledger row (plus an estimate) when the stream ends.
+func (s *Server) streamChat(w http.ResponseWriter, r *http.Request, preq provider.ChatRequest, k keys.Key) {
+	deltas, err := s.provider.StreamChat(r.Context(), preq)
+	if err != nil {
+		slog.Error("upstream", "err", err)
+		apiError(w, http.StatusBadGateway, "upstream", err.Error())
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		apiError(w, http.StatusInternalServerError, "internal", "streaming unsupported")
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+
+	var usage provider.Usage
+	var text strings.Builder
+	for delta := range deltas {
+		if delta.Err != nil {
+			sseError(w, flusher, delta.Err)
+			return
+		}
+		if delta.Text != "" {
+			text.WriteString(delta.Text)
+			chunk := map[string]any{"index": 0, "delta": map[string]string{"content": delta.Text}}
+			writeSSE(w, flusher, map[string]any{"choices": []map[string]any{chunk}})
+		}
+		if delta.Usage != nil {
+			usage = *delta.Usage
+		}
+	}
+
+	costUSD, known := s.cost.CostFor(preq.Model, usage.PromptTokens, usage.CompletionTokens)
+	s.record(r, k, preq.Model, usage, costUSD, lastUserText(preq.Messages), text.String())
+
+	final := map[string]any{
+		"choices":  []map[string]any{},
+		"usage":    usage,
+		"cost_usd": costUSD, // estimate
+	}
+	if !known {
+		final["cost_estimate"] = "unknown-model"
+	}
+	writeSSE(w, flusher, final)
+	_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	flusher.Flush()
+}
+
+func writeSSE(w http.ResponseWriter, flusher http.Flusher, obj any) {
+	data, _ := json.Marshal(obj)
+	_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+	flusher.Flush()
+}
+
+func sseError(w http.ResponseWriter, flusher http.Flusher, err error) {
+	writeSSE(w, flusher, map[string]any{
+		"error": map[string]any{"message": err.Error(), "type": "llmberth_error"},
+	})
+}
+
+// record appends the usage ledger row (and chat history when explicitly
+// enabled). Accounting failures never fail the request; they are logged.
+func (s *Server) record(r *http.Request, k keys.Key, model string, usage provider.Usage, costUSD float64, userContent, replyContent string) {
+	s.tokTotal.Add(usage.PromptTokens + usage.CompletionTokens)
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if err := s.st.RecordUsage(ctx, k.ID, model, usage.PromptTokens, usage.CompletionTokens, costUSD); err != nil {
+		slog.Error("ledger", "err", err)
+	}
+	if s.cfg.LogMessages {
+		// Bodies are only persisted when LOG_MESSAGES is explicitly on (§5.5).
+		if err := s.st.RecordChatHistory(ctx, userContent, replyContent); err != nil {
+			slog.Error("history", "err", err)
+		}
+	}
+}
+
+// lastUserText extracts the final user message content (ledger/history use).
+func lastUserText(msgs []provider.Message) string {
+	content := ""
+	for _, m := range msgs {
+		if m.Role == "user" {
+			content = m.Content
+		}
+	}
+	return content
+}
+
+func orDefault(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
+}

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Name}} — llmberth</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main>
+  <h1>{{.Name}}</h1>
+  <p class="hint">OpenAI-compatible endpoint served locally. Your API key
+  (<code>lbt_live_…</code>) stays in this browser only.</p>
+  <form id="keyForm">
+    <label for="key">API key</label>
+    <input id="key" type="password" autocomplete="off" placeholder="lbt_live_…">
+    <button id="saveKey" type="submit">Save</button>
+    <span id="keyStatus"></span>
+  </form>
+  <div id="chat" aria-live="polite"></div>
+  <form id="chatForm">
+    <textarea id="prompt" rows="2" placeholder="Say something… (Enter to send)"></textarea>
+    <button id="send" type="submit">Send</button>
+  </form>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

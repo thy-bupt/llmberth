@@ -1,0 +1,47 @@
+// Package provider abstracts the upstream LLM. One OpenAI-compatible HTTP
+// implementation covers OpenAI, DeepSeek, Qwen, vLLM and Ollama via a
+// configurable base_url; a built-in fake provider serves demos and tests
+// without touching the network.
+package provider
+
+import "context"
+
+// Message is a single chat turn (OpenAI wire format, subset).
+type Message struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// ChatRequest is the normalized incoming request.
+type ChatRequest struct {
+	Model    string
+	Messages []Message
+}
+
+// Usage is the token accounting returned by (or estimated for) a completion.
+type Usage struct {
+	PromptTokens     int64 `json:"prompt_tokens"`
+	CompletionTokens int64 `json:"completion_tokens"`
+}
+
+// ChatResponse is the normalized non-streaming result.
+type ChatResponse struct {
+	ID      string `json:"id"`
+	Model   string `json:"model"`
+	Content string `json:"content"`
+	Usage   Usage  `json:"usage"`
+}
+
+// StreamDelta is one increment of a streaming completion.
+type StreamDelta struct {
+	Text  string
+	Usage *Usage // non-nil on the final delta only
+	Err   error
+}
+
+// Provider is the upstream abstraction.
+type Provider interface {
+	Name() string
+	ChatComplete(ctx context.Context, req ChatRequest) (ChatResponse, error)
+	StreamChat(ctx context.Context, req ChatRequest) (<-chan StreamDelta, error)
+}

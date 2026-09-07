@@ -1,0 +1,17 @@
+version: {{.Manifest.Version}}
+generated_by: {{.Manifest.GeneratedBy}}
+template_version: {{.Manifest.TemplateVersion}}
+options:
+  provider: {{.Manifest.Options.Provider}}
+  ui: {{.Manifest.Options.UI}}
+  db: {{.Manifest.Options.DB}}
+services:
+  app:
+    port: {{.Manifest.Services.App.Port}}
+    admin_port: {{.Manifest.Services.App.AdminPort}}
+  postgres:
+    version: "{{.Manifest.Services.Postgres.Version}}"
+budget:
+  monthly_usd: {{.Manifest.Budget.MonthlyUSD}}
+  per_key_default_usd: {{.Manifest.Budget.PerKeyDefaultUSD}}
+# NOTE: secrets never live in this file (.env holds them, gitignored).

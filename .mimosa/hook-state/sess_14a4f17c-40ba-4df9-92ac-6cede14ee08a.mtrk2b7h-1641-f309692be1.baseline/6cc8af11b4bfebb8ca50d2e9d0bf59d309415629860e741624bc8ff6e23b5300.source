@@ -1,0 +1,141 @@
+package scaffold
+
+import (
+	"fmt"
+	"io/fs"
+	"path"
+	"strings"
+	"text/template"
+)
+
+// Engine renders the embedded template tree into a target directory.
+type Engine struct {
+	// FS is the template source filesystem (template.FS in production, a
+	// test FS in unit tests).
+	FS fs.FS
+	// Root is the sub-directory of FS holding the template sources.
+	Root string
+	// TemplateVersion stamped into the manifest.
+	TemplateVersion string
+	// CLIVersion stamped into the manifest.
+	CLIVersion string
+}
+
+// GeneratedFile records one rendered output path (relative to target root).
+type GeneratedFile struct {
+	RelPath string
+}
+
+// conditionalDirs maps wrapper directory names in the template tree to a
+// predicate on Options. When the predicate is false the whole subtree is
+// skipped; when true the wrapper segment is stripped from the output path.
+func conditionalDirs(o Options) map[string]bool {
+	return map[string]bool{
+		"__ui__": o.UI == "single-page",
+	}
+}
+
+// tmplData is the value exposed to every .tmpl file.
+type tmplData struct {
+	Name     string
+	Module   string
+	Provider ProviderPreset
+	UI       string
+	HasUI    bool
+	DB       string
+	Manifest Manifest
+}
+
+// Generate renders the whole tree into targetDir (which must be empty or
+// nonexistent). It returns the list of written files and the manifest it
+// stamped.
+func (e *Engine) Generate(opts Options, targetDir string, force bool) ([]GeneratedFile, Manifest, error) {
+	if err := opts.Validate(); err != nil {
+		return nil, Manifest{}, fmt.Errorf("invalid options: %w", err)
+	}
+	preset, err := Preset(opts.Provider)
+	if err != nil {
+		return nil, Manifest{}, err
+	}
+	manifest := NewManifest(opts, e.CLIVersion, e.TemplateVersion)
+
+	if err := ensureEmptyDir(targetDir, force); err != nil {
+		return nil, Manifest{}, err
+	}
+
+	data := tmplData{
+		Name:     opts.Name,
+		Module:   opts.Module,
+		Provider: preset,
+		UI:       opts.UI,
+		HasUI:    opts.UI == "single-page",
+		DB:       opts.DB,
+		Manifest: manifest,
+	}
+
+	var written []GeneratedFile
+	err = fs.WalkDir(e.FS, e.Root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		relIn := strings.TrimPrefix(strings.TrimPrefix(p, e.Root), "/")
+		if relIn == "" {
+			return nil
+		}
+		outRel, ok := e.mapPath(relIn, opts)
+		if !ok {
+			return nil
+		}
+
+		src, err := e.FS.Open(p)
+		if err != nil {
+			return fmt.Errorf("open template %s: %w", p, err)
+		}
+		defer src.Close() //nolint:revive // deferred close in walk callback
+
+		absOut := path.Join(targetDir, outRel)
+		if strings.HasSuffix(outRel, ".tmpl") {
+			tmpl, err := template.New(path.Base(p)).Parse(srcToText(e.FS, p))
+			if err != nil {
+				return fmt.Errorf("parse template %s: %w", p, err)
+			}
+			if err := renderToFile(tmpl, data, absOut); err != nil {
+				return fmt.Errorf("render %s: %w", p, err)
+			}
+		} else {
+			if err := copyToFile(e.FS, p, absOut); err != nil {
+				return fmt.Errorf("copy %s: %w", p, err)
+			}
+		}
+		written = append(written, GeneratedFile{RelPath: outRel})
+		return nil
+	})
+	if err != nil {
+		return nil, Manifest{}, fmt.Errorf("walk template tree: %w", err)
+	}
+	return written, manifest, nil
+}
+
+// mapPath converts a template-relative input path to an output path,
+// stripping .tmpl suffixes and resolving conditional directories. ok=false
+// means skip the file entirely.
+func (e *Engine) mapPath(relIn string, opts Options) (string, bool) {
+	segs := strings.Split(relIn, "/")
+	conds := conditionalDirs(opts)
+	out := make([]string, 0, len(segs))
+	for _, seg := range segs {
+		if enable, isCond := conds[seg]; isCond {
+			if !enable {
+				return "", false
+			}
+			continue // strip wrapper
+		}
+		out = append(out, seg)
+	}
+	result := strings.Join(out, "/")
+	result = strings.TrimSuffix(result, ".tmpl")
+	return result, true
+}

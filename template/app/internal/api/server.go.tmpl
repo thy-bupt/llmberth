@@ -1,0 +1,149 @@
+// Package api wires the HTTP surface: the public OpenAI-compatible API, the
+// loopback admin API and the health/metrics endpoints.
+package api
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"golang.org/x/time/rate"
+
+	"{{.Module}}/internal/config"
+	"{{.Module}}/internal/cost"
+	"{{.Module}}/internal/keys"
+	"{{.Module}}/internal/provider"
+	"{{.Module}}/internal/store"
+)
+
+// Server owns both listeners (public API + loopback admin API).
+type Server struct {
+	cfg      config.Config
+	st       *store.Store
+	provider provider.Provider
+	cache    *keys.Cache
+	cost     *cost.Table
+
+	limMu    sync.Mutex
+	limiters map[string]*rate.Limiter
+
+	reqTotal atomic.Int64
+	tokTotal atomic.Int64
+
+	http      *http.Server
+	adminHTTP *http.Server
+}
+
+// New assembles the server; it selects the provider (fake or OpenAI
+// compatible) from config and installs the SSRF allowlist. A misconfigured
+// upstream (e.g. base_url outside the allowlist) fails closed: New returns
+// an error and the process exits rather than silently serving a fallback.
+func New(cfg config.Config, st *store.Store) (*Server, error) {
+	provider.AllowedFromEnv()
+
+	var p provider.Provider
+	if cfg.Provider == "fake" {
+		p = provider.Fake{}
+	} else {
+		op, err := provider.NewOpenAI(cfg.BaseURL, cfg.APIKey)
+		if err != nil {
+			return nil, err
+		}
+		p = op
+	}
+
+	s := &Server{
+		cfg:      cfg,
+		st:       st,
+		provider: p,
+		cache:    keys.NewCache(),
+		cost:     cost.DefaultTable(),
+		limiters: map[string]*rate.Limiter{},
+	}
+
+	s.http = &http.Server{
+		Addr:              cfg.Port,
+		Handler:           s.publicRoutes(),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	s.adminHTTP = &http.Server{
+		Addr:              cfg.AdminPort,
+		Handler:           s.adminRoutes(),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	return s, nil
+}
+
+// Start serves the public API. BLOCKING.
+func (s *Server) Start() error {
+	slog.Info("public api listening", "addr", s.cfg.Port)
+	if err := s.http.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
+}
+
+// StartAdmin serves the admin API. BLOCKING. Note: inside docker the admin
+// listener must bind 0.0.0.0 (compose sets ADMIN_PORT=0.0.0.0:8090); the
+// loopback guarantee comes from compose publishing the port to 127.0.0.1 on
+// the host only.
+func (s *Server) StartAdmin() error {
+	slog.Info("admin api listening", "addr", s.cfg.AdminPort)
+	if err := s.adminHTTP.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
+}
+
+// Shutdown gracefully stops both listeners.
+func (s *Server) Shutdown(ctx context.Context) error {
+	err1 := s.http.Shutdown(ctx)
+	err2 := s.adminHTTP.Shutdown(ctx)
+	if err1 != nil {
+		return err1
+	}
+	return err2
+}
+
+func (s *Server) publicRoutes() http.Handler {
+	r := chi.NewRouter()
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.RealIP)
+	r.Use(s.cors)
+	r.Use(s.requestLog)
+
+	r.Get("/healthz", s.handleHealthz)
+	r.Get("/metrics", s.handleMetrics)
+
+	r.Route("/v1", func(r chi.Router) {
+		r.Use(s.authenticate)
+		r.Use(s.rateLimit)
+		r.Post("/chat/completions", s.handleChatCompletions)
+	})
+
+{{if .HasUI}}
+	// Bundled single-page UI (CSP enforced in the handler).
+	r.Get("/", s.handleIndex)
+	r.Get("/index.html", s.handleIndex)
+	r.Get("/static/{asset}", s.handleWebAsset)
+{{end}}
+	return r
+}
+
+func (s *Server) adminRoutes() http.Handler {
+	r := chi.NewRouter()
+	r.Use(middleware.Recoverer)
+	r.Use(s.adminAuth) // fail closed: valid bearer ADMIN_TOKEN required
+
+	r.Get("/admin/health", s.handleAdminHealth)
+	r.Get("/admin/keys", s.handleAdminListKeys)
+	r.Post("/admin/keys", s.handleAdminCreateKey)
+	r.Post("/admin/keys/{id}/revoke", s.handleAdminRevokeKey)
+	r.Get("/admin/usage", s.handleAdminUsage)
+	return r
+}

@@ -1,0 +1,172 @@
+package api
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net"
+	"net/http"
+	"strings"
+	"time"
+
+	"golang.org/x/time/rate"
+
+	"{{.Module}}/internal/keys"
+)
+
+// writeJSON serializes v with the given status.
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+// apiError renders an OpenAI-style error body, optionally with the
+// llmberth reason tag clients can branch on (rate_limited,
+// budget_exhausted, …).
+func apiError(w http.ResponseWriter, status int, reason, msg string) {
+	body := map[string]any{
+		"error": map[string]any{
+			"message": msg,
+			"type":    "llmberth_error",
+		},
+	}
+	if reason != "" {
+		body["error"].(map[string]any)["reason"] = reason
+	}
+	writeJSON(w, status, body)
+}
+
+// cors implements a strict allowlist CORS policy (no wildcard unless
+// explicitly configured).
+func (s *Server) cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" && s.originAllowed(origin) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			w.Header().Set("Access-Control-Max-Age", "600")
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) originAllowed(origin string) bool {
+	for _, o := range s.cfg.CORSOrigins {
+		if strings.EqualFold(strings.TrimSpace(o), origin) {
+			return true
+		}
+	}
+	return false
+}
+
+// requestLog emits one structured log line per request. Message bodies are
+// NEVER logged unless LOG_MESSAGES is explicitly enabled (§5.5).
+func (s *Server) requestLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		slog.Debug("request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"remote", remoteHost(r),
+			"duration_ms", time.Since(start).Milliseconds(),
+		)
+	})
+}
+
+func remoteHost(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+// authenticate resolves the Bearer lbt_live_… key against the cache (and the
+// database on a miss), and rejects revoked/missing keys. Admin tokens are
+// NOT valid API keys by construction (different prefix).
+func (s *Server) authenticate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, ok := keys.ExtractBearer(r.Header.Get("Authorization"))
+		if !ok {
+			apiError(w, http.StatusUnauthorized, "invalid_key", "missing or malformed API key (expect Authorization: Bearer lbt_live_…)")
+			return
+		}
+		hashHex := keys.Hash(raw)
+		k, ok := s.cache.GetByHash(hashHex)
+		if !ok {
+			dbKey, err := s.lookupKey(hashHex)
+			if err != nil {
+				slog.Error("key lookup", "err", err)
+				apiError(w, http.StatusInternalServerError, "internal", "key lookup failed")
+				return
+			}
+			if dbKey == nil {
+				apiError(w, http.StatusUnauthorized, "invalid_key", "unknown or revoked API key")
+				return
+			}
+			k = *dbKey
+			s.cache.PutByHash(hashHex, k)
+		}
+		if k.Revoked() {
+			apiError(w, http.StatusUnauthorized, "key_revoked", "this API key has been revoked")
+			return
+		}
+		if !k.HasScope("chat") {
+			apiError(w, http.StatusForbidden, "scope", "key lacks the chat scope")
+			return
+		}
+		r = r.WithContext(withKey(r.Context(), k))
+		next.ServeHTTP(w, r)
+	})
+}
+
+// rateLimit enforces the per-key requests/second budget in-process. Single
+// instance premise (documented); multi-instance limiting is future work.
+func (s *Server) rateLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		k, _ := keyFromContext(r.Context())
+		rps := s.cfg.RateLimitRPS
+		if k.RateLimitRPS > 0 {
+			rps = float64(k.RateLimitRPS)
+		}
+		lim := s.limiterFor(k.ID, rps)
+		if !lim.Allow() {
+			apiError(w, http.StatusTooManyRequests, "rate_limited", "rate limit exceeded for this key")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) limiterFor(keyID string, rps float64) *rate.Limiter {
+	s.limMu.Lock()
+	defer s.limMu.Unlock()
+	lim, ok := s.limiters[keyID]
+	if !ok {
+		lim = rate.NewLimiter(rate.Limit(rps), int(rps)+1)
+		s.limiters[keyID] = lim
+	}
+	return lim
+}
+
+// adminAuth guards /admin/*: a constant-time Bearer ADMIN_TOKEN comparison,
+// fail closed on any mismatch. The admin API additionally only listens on
+// loopback (or is only published to host loopback in docker).
+func (s *Server) adminAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		const bearer = "Bearer "
+		h := r.Header.Get("Authorization")
+		if !strings.HasPrefix(h, bearer) || !constantTimeEqual(strings.TrimPrefix(h, bearer), s.cfg.AdminToken) {
+			apiError(w, http.StatusUnauthorized, "admin_auth", "admin API requires a valid token")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}

@@ -1,0 +1,125 @@
+// Package keys implements generated-app-side API key verification: SHA-256
+// hashing, constant-time comparison, an in-memory cache and instant
+// revocation (the loopback admin API clears the cache on revoke).
+package keys
+
+import (
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
+	"encoding/hex"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+)
+
+// Prefix marks every key this app accepts, so other bearer tokens (e.g. the
+// admin token) can never be confused with an API key.
+const Prefix = "lbt_live_"
+
+// Key is the cached, verified form of an API key.
+type Key struct {
+	ID           string
+	Name         string
+	Prefix       string
+	Scopes       []string
+	RateLimitRPS int
+	BudgetUSD    float64 // effective only when HasBudget is true
+	HasBudget    bool
+	RevokedAt    *time.Time
+}
+
+// HasScope reports whether the key may perform the given action.
+func (k *Key) HasScope(scope string) bool {
+	for _, s := range k.Scopes {
+		if s == scope {
+			return true
+		}
+	}
+	return false
+}
+
+// Revoked reports the revocation state.
+func (k *Key) Revoked() bool {
+	return k.RevokedAt != nil
+}
+
+// Hash returns the hex SHA-256 of a presented key.
+func Hash(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:])
+}
+
+// Verify compares a presented key against a stored hash in constant time.
+func Verify(presented, storedHash string) bool {
+	got := Hash(presented)
+	return subtle.ConstantTimeCompare([]byte(got), []byte(storedHash)) == 1
+}
+
+// Generate creates a new API key. The full key is returned exactly once and
+// never persisted; callers store Hash(full) plus the display prefix.
+func Generate() (full, prefix string, err error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", "", fmt.Errorf("rand: %w", err)
+	}
+	body := base64.RawURLEncoding.EncodeToString(buf)
+	full = Prefix + body
+	prefix = Prefix + body[:8]
+	return full, prefix, nil
+}
+
+// Cache holds verified keys in memory. Lookups by hash avoid a DB round trip
+// on every request; Invalidate clears one entry (or all) so revocation
+// through the admin API takes effect immediately.
+type Cache struct {
+	mu    sync.RWMutex
+	byKey map[string]Key // keyed by SHA-256 hex
+}
+
+func NewCache() *Cache {
+	return &Cache{byKey: map[string]Key{}}
+}
+
+func (c *Cache) PutByHash(hashHex string, k Key) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.byKey[hashHex] = k
+}
+
+func (c *Cache) GetByHash(hashHex string) (Key, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	k, ok := c.byKey[hashHex]
+	return k, ok
+}
+
+// Invalidate removes a single hash from the cache (used on revoke).
+func (c *Cache) Invalidate(hashHex string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.byKey, hashHex)
+}
+
+// InvalidateAll empties the cache; the next request re-reads from the DB.
+func (c *Cache) InvalidateAll() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.byKey = map[string]Key{}
+}
+
+// ExtractBearer pulls the raw API key out of an Authorization header,
+// enforcing the lbt_live_ prefix (fail closed on anything else).
+func ExtractBearer(header string) (string, bool) {
+	const bearer = "Bearer "
+	if !strings.HasPrefix(header, bearer) {
+		return "", false
+	}
+	raw := strings.TrimSpace(strings.TrimPrefix(header, bearer))
+	if !strings.HasPrefix(raw, Prefix) {
+		return "", false
+	}
+	return raw, true
+}

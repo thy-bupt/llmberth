@@ -1,0 +1,79 @@
+package provider
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+)
+
+// Fake answers locally without touching the network. It is used for demos
+// (LLM_PROVIDER=fake), for the generated project's go test suite and for
+// golden tests — never against real API keys.
+type Fake struct{}
+
+func (Fake) Name() string { return "fake" }
+
+const fakeReplyFormat = "[fake] you said: %s"
+
+func lastUserContent(msgs []Message) string {
+	content := ""
+	for _, m := range msgs {
+		if m.Role == "user" {
+			content = m.Content
+		}
+	}
+	return content
+}
+
+func fakeUsage(msgs []Message, reply string) Usage {
+	in := int64(0)
+	for _, m := range msgs {
+		in += int64(len(m.Content)) / 4
+	}
+	if in == 0 {
+		in = 1
+	}
+	out := int64(len(reply))/4 + 1
+	return Usage{PromptTokens: in, CompletionTokens: out}
+}
+
+func (Fake) ChatComplete(ctx context.Context, req ChatRequest) (ChatResponse, error) {
+	if err := ctx.Err(); err != nil {
+		return ChatResponse{}, err
+	}
+	reply := fmt.Sprintf(fakeReplyFormat, lastUserContent(req.Messages))
+	model := req.Model
+	if model == "" {
+		model = "fake-chat"
+	}
+	return ChatResponse{
+		ID:      "chatcmpl-fake-1",
+		Model:   model,
+		Content: reply,
+		Usage:   fakeUsage(req.Messages, reply),
+	}, nil
+}
+
+func (Fake) StreamChat(ctx context.Context, req ChatRequest) (<-chan StreamDelta, error) {
+	reply := fmt.Sprintf(fakeReplyFormat, lastUserContent(req.Messages))
+	usage := fakeUsage(req.Messages, reply)
+	out := make(chan StreamDelta, 8)
+	go func() {
+		defer close(out)
+		// Stream word by word so SSE consumers see a realistic flow.
+		words := strings.SplitAfter(reply, " ")
+		for _, w := range words {
+			select {
+			case <-ctx.Done():
+				out <- StreamDelta{Err: ctx.Err()}
+				return
+			case out <- StreamDelta{Text: w}:
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		u := usage
+		out <- StreamDelta{Usage: &u}
+	}()
+	return out, nil
+}

@@ -1,0 +1,138 @@
+[
+  {
+    "path": ".dockerignore",
+    "sha256": "45fb4059ee6e1eac197e04f59e905eeba9313a99c8dcb32e961c33a084b1a874"
+  },
+  {
+    "path": ".env.example",
+    "sha256": "c50490ae2dd0493b87d7a0e1fe0d0913625401a582a0d427045eba6fac562421"
+  },
+  {
+    "path": ".gitignore",
+    "sha256": "98e29d874636f64555c2de108d40c336c7d035790291a18e18951cc4a7793bc4"
+  },
+  {
+    "path": ".llmberth.yaml",
+    "sha256": "46a042a6acb5ca8d2bbb2bbb3fe7e8946e9bea014b32041e6e5dad5fcc5dfbbf"
+  },
+  {
+    "path": "Dockerfile",
+    "sha256": "7ae309198c7ff695e45a2253ed33d903f78fa5ce36ba7c9c97e324065ae4a9c6"
+  },
+  {
+    "path": "Makefile",
+    "sha256": "2376b6668feb19b975185431e2cc75b37cca9889874fadb824665d51b39966cb"
+  },
+  {
+    "path": "README.md",
+    "sha256": "cfbd4c9272b4d9b88c6da68c5e754bb3323fa0dcddc429f21f20ffbaebc5f421"
+  },
+  {
+    "path": "docker-compose.yml",
+    "sha256": "7ce5ed80cce493eb3a61d9b70370fc824ec575d52f5138c2fd23d158725cf103"
+  },
+  {
+    "path": "go.mod",
+    "sha256": "987fa7d2e9bf5911c456a95edd8ac2be1e21e98a240fba172c6ef8c94e8466a5"
+  },
+  {
+    "path": "internal/api/admin.go",
+    "sha256": "c3066059364fd8fafe0e212eaf58cf1459dbf7963a34fc9d424e4e0ccd42716f"
+  },
+  {
+    "path": "internal/api/chat.go",
+    "sha256": "3bdd8eddf15168edf3e24f093847dd7d1a901515a5fe1709f7208b1ff7e4f244"
+  },
+  {
+    "path": "internal/api/health.go",
+    "sha256": "43d61c72b89116bcf7908033103f2c159d8d7f36de3aecaddb6349bce237994e"
+  },
+  {
+    "path": "internal/api/middleware.go",
+    "sha256": "30fae3c872e38a7aaf81f8b6248aca94d03c8e0a00d9767abcab37077add478d"
+  },
+  {
+    "path": "internal/api/server.go",
+    "sha256": "8010ee69c7867b352b925dad6327d493f58d33ae95505cb3ea6aac221846460c"
+  },
+  {
+    "path": "internal/config/config.go",
+    "sha256": "92db69699c09d73dc0bcecc12e5e7e08ab3c1b750ebd24219c2c3030a7153744"
+  },
+  {
+    "path": "internal/cost/cost.go",
+    "sha256": "8e51b0f4318e8dc50a290678d8247cdaf55cde20afb6b5ed0d39ced6ab71f7e2"
+  },
+  {
+    "path": "internal/cost/cost_test.go",
+    "sha256": "1fe8aa1916262a4c0d6999c43730670703acff2df714d8aa09b62a9c6093bac9"
+  },
+  {
+    "path": "internal/cost/models.yaml",
+    "sha256": "c7607e33cc0671931279ff7b03d4c0677217ad07f28a351cb1dc1d9f461668e6"
+  },
+  {
+    "path": "internal/keys/keys.go",
+    "sha256": "44ee72474bd52996cfe5f2d7713d51e53e7f280d340dbc2d3c55d0b790b79245"
+  },
+  {
+    "path": "internal/keys/keys_test.go",
+    "sha256": "338a29bffa008f620ca662a963242dd5517d0e36cd1f4c0c678252b1a6d96a49"
+  },
+  {
+    "path": "internal/provider/allowlist.go",
+    "sha256": "0294fcb647627df47b6d63623c1f9dc8b31ed57a76b64c90cf641acf9e973468"
+  },
+  {
+    "path": "internal/provider/fake.go",
+    "sha256": "c53641849b794ac6e275cd77823e11768b69cf0604f9db90697fdb596e548327"
+  },
+  {
+    "path": "internal/provider/openai.go",
+    "sha256": "ae0b883748cbf481ac4f39411d444fe29656be38ea2201957a69bb3025d3112c"
+  },
+  {
+    "path": "internal/provider/provider.go",
+    "sha256": "772a4d772a47a49d021260e8ae4f15fad8cbbb91d0f087f73f3248d2088c49db"
+  },
+  {
+    "path": "internal/provider/provider_test.go",
+    "sha256": "de7a3db7a42060993c00589f74e69ae220ff0b1c61cd4563665fedbb7abc05a5"
+  },
+  {
+    "path": "internal/store/migrations/0001_init.down.sql",
+    "sha256": "fe6498adc4524dc6d9717ce01543560f1104aa4bde10a2a0571db27be49cf525"
+  },
+  {
+    "path": "internal/store/migrations/0001_init.up.sql",
+    "sha256": "c812b018d7fdb517930cd1155bb37641cbcc0bb45db4d62556f6176ef3af7d87"
+  },
+  {
+    "path": "internal/store/queries.go",
+    "sha256": "c68b0e4b7b8ea62a21dc9262dd18c03a68f0cb75591beadeee6cd154b274ac60"
+  },
+  {
+    "path": "internal/store/store.go",
+    "sha256": "6486420292a213b23fb58d7ba0e5328f2ce3cd2c45e4462ee4f2adae3be71f40"
+  },
+  {
+    "path": "internal/web/static/app.js",
+    "sha256": "732b0365af4768b4fd5a8889a6991c9769cdbbe9c510659c150e950ed474847d"
+  },
+  {
+    "path": "internal/web/static/index.html",
+    "sha256": "75e47b85e2951b5dfc90aa6c43f20927e3256a4899fa016d50d71d22b15ec50f"
+  },
+  {
+    "path": "internal/web/static/style.css",
+    "sha256": "5d3aadc04549207764748fc2c3c88960d35d4248d1b94f82a38d6b4de73f7ba1"
+  },
+  {
+    "path": "internal/web/web.go",
+    "sha256": "0637a19ade27f39f7e307a1926922b04fc9bcdcd1e15dec5c3e7529e0524d634"
+  },
+  {
+    "path": "main.go",
+    "sha256": "09eed5504a897aaeb1021c2f5cf1512da3536f29b863cbb01755af2c4eb2808c"
+  }
+]

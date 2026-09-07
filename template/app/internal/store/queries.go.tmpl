@@ -1,0 +1,241 @@
+package store
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+)
+
+// KeyRow is the persisted api_keys row as seen by the app.
+type KeyRow struct {
+	ID           string
+	Name         string
+	Hash         string
+	Prefix       string
+	Scopes       []string
+	RateLimitRPS int
+	BudgetUSD    float64 // 0 = no per-key budget
+	HasBudget    bool
+	RevokedAt    *time.Time
+	CreatedAt    time.Time
+}
+
+// LookupKeyByHash returns the key for hashHex, or nil when unknown/revoked.
+func (s *Store) LookupKeyByHash(ctx context.Context, hashHex string) (*KeyRow, error) {
+	rows, err := s.Pool.Query(ctx, `
+		SELECT id, name, key_hash, prefix, scopes, rate_limit_rps,
+		       COALESCE(budget_usd, 0), (budget_usd IS NOT NULL), revoked_at, created_at
+		FROM api_keys
+		WHERE key_hash = $1`, hashHex)
+	if err != nil {
+		return nil, fmt.Errorf("query key: %w", err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+	var k KeyRow
+	var scopes []string
+	var revokedAt *time.Time
+	if err := rows.Scan(&k.ID, &k.Name, &k.Hash, &k.Prefix, &scopes, &k.RateLimitRPS,
+		&k.BudgetUSD, &k.HasBudget, &revokedAt, &k.CreatedAt); err != nil {
+		return nil, err
+	}
+	k.Scopes = scopes
+	k.RevokedAt = revokedAt
+	return &k, nil
+}
+
+// GetKeyByID fetches a key row by id (admin paths).
+func (s *Store) GetKeyByID(ctx context.Context, id string) (*KeyRow, error) {
+	rows, err := s.Pool.Query(ctx, `
+		SELECT id, name, key_hash, prefix, scopes, rate_limit_rps,
+		       COALESCE(budget_usd, 0), (budget_usd IS NOT NULL), revoked_at, created_at
+		FROM api_keys WHERE id = $1`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return nil, nil
+	}
+	var k KeyRow
+	var scopes []string
+	var revokedAt *time.Time
+	if err := rows.Scan(&k.ID, &k.Name, &k.Hash, &k.Prefix, &scopes, &k.RateLimitRPS,
+		&k.BudgetUSD, &k.HasBudget, &revokedAt, &k.CreatedAt); err != nil {
+		return nil, err
+	}
+	k.Scopes = scopes
+	k.RevokedAt = revokedAt
+	return &k, nil
+}
+
+// CreateKey inserts a new key row (hash + prefix only) and returns its id.
+func (s *Store) CreateKey(ctx context.Context, hashHex, prefix, name string, rateLimitRPS int, budgetUSD float64, hasBudget bool) (string, error) {
+	var budget any
+	if hasBudget {
+		budget = budgetUSD
+	}
+	var id string
+	err := s.Pool.QueryRow(ctx, `
+		INSERT INTO api_keys (name, key_hash, prefix, scopes, rate_limit_rps, budget_usd)
+		VALUES ($1, $2, $3, '{chat}', $4, $5)
+		RETURNING id`, name, hashHex, prefix, rateLimitRPS, budget).Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("create key: %w", err)
+	}
+	return id, nil
+}
+
+// RevokeKey marks a key revoked; returns whether a row was updated.
+func (s *Store) RevokeKey(ctx context.Context, id string) (bool, error) {
+	tag, err := s.Pool.Exec(ctx, `
+		UPDATE api_keys SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL`, id)
+	if err != nil {
+		return false, fmt.Errorf("revoke key: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+// ListKeys returns all keys (admin listing; hashes included for cache mgmt,
+// never sent to clients).
+func (s *Store) ListKeys(ctx context.Context) ([]KeyRow, error) {
+	rows, err := s.Pool.Query(ctx, `
+		SELECT id, name, key_hash, prefix, scopes, rate_limit_rps,
+		       COALESCE(budget_usd, 0), (budget_usd IS NOT NULL), revoked_at, created_at
+		FROM api_keys ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []KeyRow
+	for rows.Next() {
+		var k KeyRow
+		var scopes []string
+		var revokedAt *time.Time
+		if err := rows.Scan(&k.ID, &k.Name, &k.Hash, &k.Prefix, &scopes, &k.RateLimitRPS,
+			&k.BudgetUSD, &k.HasBudget, &revokedAt, &k.CreatedAt); err != nil {
+			return nil, err
+		}
+		k.Scopes = scopes
+		k.RevokedAt = revokedAt
+		out = append(out, k)
+	}
+	return out, rows.Err()
+}
+
+// UsagePoint is one aggregation row.
+type UsagePoint struct {
+	Group            string  `json:"group"`
+	Requests         int64   `json:"requests"`
+	PromptTokens     int64   `json:"prompt_tokens"`
+	CompletionTokens int64   `json:"completion_tokens"`
+	CostUSD          float64 `json:"cost_usd"` // estimate
+}
+
+// UsageAggregate groups ledger rows since a given time.
+// by is "key" (key prefix), "model" or "" (total).
+func (s *Store) UsageAggregate(ctx context.Context, by string, since time.Time, limit int) ([]UsagePoint, error) {
+	groupExpr := "''"
+	switch by {
+	case "key":
+		groupExpr = "COALESCE((SELECT prefix FROM api_keys WHERE api_keys.id = usage_ledger.key_id), 'unknown')"
+	case "model":
+		groupExpr = "model"
+	}
+	rows, err := s.Pool.Query(ctx, fmt.Sprintf(`
+		SELECT %s AS grp, COUNT(*) AS requests,
+		       COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0),
+		       COALESCE(SUM(cost_usd), 0)
+		FROM usage_ledger
+		WHERE created_at >= $1
+		GROUP BY grp
+		ORDER BY COALESCE(SUM(cost_usd), 0) DESC
+		LIMIT $2`, groupExpr), since, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []UsagePoint
+	for rows.Next() {
+		var p UsagePoint
+		if err := rows.Scan(&p.Group, &p.Requests, &p.PromptTokens, &p.CompletionTokens, &p.CostUSD); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// MonthCostByKey sums estimated spend for a key in the current month.
+func (s *Store) MonthCostByKey(ctx context.Context, keyID string) (float64, error) {
+	var sum float64
+	err := s.Pool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(cost_usd), 0) FROM usage_ledger
+		WHERE key_id = $1 AND created_at >= date_trunc('month', now())`, keyID).Scan(&sum)
+	return sum, err
+}
+
+// MonthCostAll sums estimated spend for the whole project this month.
+func (s *Store) MonthCostAll(ctx context.Context) (float64, error) {
+	var sum float64
+	err := s.Pool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(cost_usd), 0) FROM usage_ledger
+		WHERE created_at >= date_trunc('month', now())`).Scan(&sum)
+	return sum, err
+}
+
+// RecordUsage appends one ledger row. Append-only by design.
+func (s *Store) RecordUsage(ctx context.Context, keyID, model string, promptTokens, completionTokens int64, costUSD float64) error {
+	_, err := s.Pool.Exec(ctx, `
+		INSERT INTO usage_ledger (key_id, model, prompt_tokens, completion_tokens, cost_usd)
+		VALUES ($1, $2, $3, $4, $5)`,
+		nullableID(keyID), model, promptTokens, completionTokens, costUSD)
+	return err
+}
+
+// RecordChatHistory persists a session + two messages (user, assistant) when
+// LOG_MESSAGES is enabled. Bodies live in the DB only, never in logs.
+func (s *Store) RecordChatHistory(ctx context.Context, userContent, assistantContent string) error {
+	var sessionID string
+	err := s.Pool.QueryRow(ctx, `
+		INSERT INTO sessions (title) VALUES (left($1, 60)) RETURNING id`, userContent).Scan(&sessionID)
+	if err != nil {
+		return err
+	}
+	for _, m := range []struct{ role, content string }{
+		{"user", userContent},
+		{"assistant", assistantContent},
+	} {
+		if _, err := s.Pool.Exec(ctx, `
+			INSERT INTO messages (session_id, role, content) VALUES ($1, $2, $3)`,
+			sessionID, m.role, m.content); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RecordAudit appends an audit_log row (management actions).
+func (s *Store) RecordAudit(ctx context.Context, actor, action, target string, detail map[string]any) error {
+	raw, _ := json.Marshal(detail)
+	if detail == nil {
+		raw = []byte("{}")
+	}
+	_, err := s.Pool.Exec(ctx, `
+		INSERT INTO audit_log (actor, action, target, detail) VALUES ($1, $2, $3, $4)`,
+		actor, action, target, raw)
+	return err
+}
+
+func nullableID(id string) any {
+	if id == "" {
+		return nil
+	}
+	return id
+}

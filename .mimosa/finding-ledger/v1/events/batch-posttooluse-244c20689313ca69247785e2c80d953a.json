@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "posttooluse-244c20689313ca69247785e2c80d953a",
+  "runId": null,
+  "runStatus": "completed",
+  "coverage": {
+    "status": "complete",
+    "reasons": []
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "PostToolUse"
+  },
+  "revision": null,
+  "diffHash": null,
+  "rulesVersion": null,
+  "sessionHash": "cb0b3a5fb6290bee77ccdf523b72b8e80510f3cd07089bdb1ee08fc232b09075",
+  "reportRef": null,
+  "events": [
+    {
+      "eventId": "hook-4b6215b286494f3f3cdf26ee95c2fd10",
+      "findingId": "mimosa-3a904ec8202dd3d004e30179",
+      "type": "static_fix_verified",
+      "at": "2026-09-07T18:45:22.001Z",
+      "identity": {
+        "projectRelativeFile": "goldens/golden_test.go",
+        "ruleId": "security",
+        "codeEvidenceHash": "89a701b4831c585e21501d8601359854aeb491231e665c1336a20533fa8ed896",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 58,
+      "endLine": 58,
+      "reasonCode": "static_rescan_passed",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "observed",
+        "producer": "deterministic",
+        "evidenceHash": "89a701b4831c585e21501d8601359854aeb491231e665c1336a20533fa8ed896"
+      },
+      "sequence": 0
+    },
+    {
+      "eventId": "hook-9aa6b3d32558d3ccc6b2ab187dec4ff6",
+      "findingId": "mimosa-428a37a37208f45ac65ee805",
+      "type": "static_fix_verified",
+      "at": "2026-09-07T18:45:22.001Z",
+      "identity": {
+        "projectRelativeFile": "goldens/golden_test.go",
+        "ruleId": "security",
+        "codeEvidenceHash": "5fff34b9048de818a974c0786fc9ce4e31118641a77dbe27f797dce6c915f677",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 50,
+      "endLine": 50,
+      "reasonCode": "static_rescan_passed",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "observed",
+        "producer": "deterministic",
+        "evidenceHash": "5fff34b9048de818a974c0786fc9ce4e31118641a77dbe27f797dce6c915f677"
+      },
+      "sequence": 1
+    },
+    {
+      "eventId": "hook-2d38cd13117053262679b521142a131a",
+      "findingId": "mimosa-9155919fd29e8368c031b333",
+      "type": "static_fix_verified",
+      "at": "2026-09-07T18:45:22.001Z",
+      "identity": {
+        "projectRelativeFile": "goldens/golden_test.go",
+        "ruleId": "security",
+        "codeEvidenceHash": "52b6b92adaa41836627c718b90b597214383b6142f0db8cbb51d5ff02de6e93b",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 59,
+      "endLine": 59,
+      "reasonCode": "static_rescan_passed",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "observed",
+        "producer": "deterministic",
+        "evidenceHash": "52b6b92adaa41836627c718b90b597214383b6142f0db8cbb51d5ff02de6e93b"
+      },
+      "sequence": 2
+    }
+  ],
+  "observedFindingIds": [],
+  "verifiedFiles": [],
+  "recordedAt": "2026-09-07T18:45:22.172Z"
+}
