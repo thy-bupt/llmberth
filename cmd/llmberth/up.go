@@ -41,7 +41,10 @@ func withSignalCtx() (context.Context, context.CancelFunc) {
 }
 
 func newUpCmd() *cobra.Command {
-	var path string
+	var (
+		path    string
+		profile string
+	)
 	cmd := &cobra.Command{
 		Use:   "up",
 		Short: "Start the project's compose stack (postgres + app) and wait for health",
@@ -56,10 +59,19 @@ func newUpCmd() *cobra.Command {
 			if overlay, err := keychainOverlay(); err == nil {
 				extra = overlay
 			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "note: keychain unavailable (%v) — continuing with .env values\\n", err)
+				fmt.Fprintf(cmd.OutOrStdout(), "note: keychain unavailable (%v) — continuing with .env values\n", err)
 			}
 			ctx, cancel := withSignalCtx()
 			defer cancel()
+			prod := profile == "prod"
+			if prod {
+				fmt.Fprintln(cmd.OutOrStdout(), "Starting stack (prod profile: Caddy TLS on 443/80, app/postgres on internal network only)…")
+				if err := runtime.UpProd(ctx, dir, extra); err != nil {
+					return err
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), "Prod stack is up. TLS via Caddy; admin API has no host mapping (loopback by construction).")
+				return nil
+			}
 			fmt.Fprintln(cmd.OutOrStdout(), "Starting stack (docker compose up -d --wait)…")
 			if err := runtime.Up(ctx, dir, extra); err != nil {
 				return err
@@ -69,6 +81,7 @@ func newUpCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&path, "path", "", "project directory (default: nearest .llmberth.yaml)")
+	cmd.Flags().StringVar(&profile, "profile", "dev", "compose profile: dev (default) or prod (Caddy TLS)")
 	return cmd
 }
 

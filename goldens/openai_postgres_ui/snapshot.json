@@ -24,6 +24,10 @@
     "sha256": "46a042a6acb5ca8d2bbb2bbb3fe7e8946e9bea014b32041e6e5dad5fcc5dfbbf"
   },
   {
+    "path": "Caddyfile",
+    "sha256": "fdb836a96fa48f617c87b25e5c6a488059fd6fd41cb04c26dc86696f6621b8b1"
+  },
+  {
     "path": "Dockerfile",
     "sha256": "259e4889b8a7700e1374b16c08999866373b1d5fc7c98e64b26f19cefa602ee9"
   },
@@ -34,6 +38,10 @@
   {
     "path": "README.md",
     "sha256": "a03b9ec3884290847d1481089f8e9a7c009e80c606790df38f88d1b9e822b5c7"
+  },
+  {
+    "path": "docker-compose.prod.yml",
+    "sha256": "cdd796123ffcf4185d0159a3c659d5da128f860a45441d50503633a07f03ed68"
   },
   {
     "path": "docker-compose.yml",

@@ -40,6 +40,24 @@ func composeUpCmd(dir string) *exec.Cmd {
 	return c
 }
 
+func composeUpProdCmd(dir string) *exec.Cmd {
+	c := exec.Command("docker", "compose", "-f", "docker-compose.yml", "-f", "docker-compose.prod.yml", "up", "-d", "--wait")
+	c.Dir = dir
+	return c
+}
+
+func composeDownProdCmd(dir string) *exec.Cmd {
+	c := exec.Command("docker", "compose", "-f", "docker-compose.yml", "-f", "docker-compose.prod.yml", "down")
+	c.Dir = dir
+	return c
+}
+
+func composePsProdCmd(dir string) *exec.Cmd {
+	c := exec.Command("docker", "compose", "-f", "docker-compose.yml", "-f", "docker-compose.prod.yml", "ps", "--format", "json")
+	c.Dir = dir
+	return c
+}
+
 func composeDownCmd(dir string) *exec.Cmd {
 	c := exec.Command("docker", "compose", "down")
 	c.Dir = dir
@@ -111,9 +129,40 @@ func Stop(_ context.Context, dir string) error {
 	return err
 }
 
+// StopProd tears the prod profile down (same volumes kept).
+func StopProd(_ context.Context, dir string) error {
+	_, err := run(composeDownProdCmd(dir))
+	return err
+}
+
+// UpProd brings the prod profile up (Caddy TLS terminates 443/80; app and
+// postgres publish no host ports).
+func UpProd(_ context.Context, dir string, extraEnv []string) error {
+	c := composeUpProdCmd(dir)
+	if len(extraEnv) > 0 {
+		c.Env = append(os.Environ(), extraEnv...)
+	}
+	_, err := run(c)
+	return err
+}
+
 // StatusRaw returns `docker compose ps --format json` output for parsing.
 func StatusRaw(_ context.Context, dir string) ([]byte, error) {
 	return run(composePsCmd(dir))
+}
+
+// StatusRawProd returns prod-profile service status (JSON lines).
+func StatusRawProd(_ context.Context, dir string) ([]byte, error) {
+	return run(composePsProdCmd(dir))
+}
+
+// ValidateProdConfig verifies the prod override parses (compose config -q
+// with both files; used by CI and doctor-style checks).
+func ValidateProdConfig(_ context.Context, dir string) error {
+	c := exec.Command("docker", "compose", "-f", "docker-compose.yml", "-f", "docker-compose.prod.yml", "config", "-q") //nolint:gosec // constant argv + allowlisted dir
+	c.Dir = dir
+	_, err := run(c)
+	return err
 }
 
 // StatusRow is one service line of a friendly status table.

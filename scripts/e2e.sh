@@ -80,6 +80,8 @@ curl -fsS -N http://127.0.0.1:8080/v1/chat/completions \
   -d '{"model":"fake-chat","messages":[{"role":"user","content":"hi"}],"stream":true}' \
   | grep -q '\[DONE\]'
 
+echo "==> prod profile config validity (Caddy TLS shape)"
+APP_DOMAIN=api.example.test docker compose -f docker-compose.yml -f docker-compose.prod.yml config -q || { echo "FAIL: prod config invalid"; exit 1; }
 echo "==> usage aggregate"
 curl -fsS "http://127.0.0.1:8090/admin/usage?by=model" \
   -H "Authorization: Bearer $(cat .llmberth-admin-token)" | grep -q 'fake-chat'
