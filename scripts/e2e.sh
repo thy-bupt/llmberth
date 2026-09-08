@@ -8,6 +8,12 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="${E2E_DIR:-$(mktemp -d /tmp/llmberth-e2e.XXXXXX)}"
 PROJ="$WORK/e2e-app"
 
+echo "==> preflight: docker daemon + compose"
+if ! docker info >/dev/null 2>&1; then
+  echo "FAIL: docker daemon not reachable (OrbStack: run 'orb start'; Docker Desktop: start it)."
+  exit 1
+fi
+
 echo "==> building llmberth"
 (cd "$REPO" && go build -o "$WORK/llmberth" ./cmd/llmberth)
 
