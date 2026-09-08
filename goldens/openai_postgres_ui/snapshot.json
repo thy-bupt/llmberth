@@ -49,7 +49,7 @@
   },
   {
     "path": "go.mod",
-    "sha256": "987fa7d2e9bf5911c456a95edd8ac2be1e21e98a240fba172c6ef8c94e8466a5"
+    "sha256": "787d23b3157859700a41f3b94fd9b727bdee724eecde243142813fd618eed188"
   },
   {
     "path": "internal/api/admin.go",
