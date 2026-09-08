@@ -2,6 +2,10 @@ module github.com/thy-bupt/llmberth
 
 go 1.25.0
 
+// Pinned so CI's stdlib includes the net/url & TLS fixes (GO-2026-6218 /
+// GO-2026-6090); setup-go installs this toolchain from go.mod.
+toolchain go1.25.13
+
 require (
 	github.com/99designs/keyring v1.2.2
 	github.com/charmbracelet/bubbletea v1.3.10
