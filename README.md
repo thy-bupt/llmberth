@@ -56,18 +56,20 @@ as security homework:
 ## The life of a project (single binary)
 
 ```console
-llmberth init <name>       # generate: source is yours from commit one
-llmberth dev               # hot-reload dev stack            (M2, v0.2)
-llmberth up / stop / status
-llmberth logs [-f]
-llmberth keys add|list|revoke
-llmberth usage [--by key|model]
-llmberth doctor [--security]   # 12-point security audit     (M4, v0.4)
+llmberth init <name>        # generate: source is yours from commit one
+llmberth dev                # postgres + host app with air hot reload
+llmberth up / stop / status # manage the compose stack
+llmberth logs [-f] [app|postgres]
+llmberth keys add|list|revoke   # via loopback admin API; full key shown once
+llmberth doctor             # docker/compose, .env completeness, reachability
+llmberth usage [--by key|model] # ledger aggregates             (M3, v0.3)
+llmberth tui                # dashboard / keys / logs         (M3, v0.3)
+llmberth doctor --security  # 12-point audit + Caddy TLS      (M4, v0.4)
 ```
 
-v0.1 (current) delivers `init` plus the full generated app; lifecycle
-commands land in v0.2, the TUI in v0.3, Caddy TLS + `doctor --security` in
-v0.4. See [PLAN.md](../PLAN.md) for the milestone map.
+v0.2 (current) delivers the lifecycle commands and the keys workflow.
+The TUI lands in v0.3, Caddy TLS + `doctor --security` in v0.4.
+See [PLAN.md](../PLAN.md) for the milestone map.
 
 ## Architecture
 

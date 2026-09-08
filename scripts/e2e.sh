@@ -22,7 +22,9 @@ go build ./...
 go test ./...
 
 echo "==> compose up"
-docker compose up -d --wait
+# --build is essential: the project name (and image tag) is stable across
+# runs, so without it compose would silently reuse a stale app image.
+docker compose up -d --build --wait
 
 cleanup() {
   echo "==> compose down"
@@ -31,7 +33,14 @@ cleanup() {
 trap cleanup EXIT
 
 echo "==> healthz"
-curl -fsS http://127.0.0.1:8080/healthz | grep -q '"ok"'
+HEALTHY=0
+for i in $(seq 1 30); do
+  if curl -fsS -m 2 http://127.0.0.1:8080/healthz 2>/dev/null | grep -q '"ok"'; then
+    HEALTHY=1; break
+  fi
+  sleep 1
+done
+[ "$HEALTHY" = "1" ] || { echo "FAIL: app never became healthy"; exit 1; }
 
 echo "==> create key via loopback admin API"
 KEY_JSON=$(curl -fsS http://127.0.0.1:8090/admin/keys \
@@ -64,5 +73,43 @@ CODE=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/chat/comp
   -H "Authorization: Bearer $FULL_KEY" -H "Content-Type: application/json" \
   -d '{"model":"fake-chat","messages":[{"role":"user","content":"still?"}]}')
 [ "$CODE" = "401" ] || { echo "FAIL: expected 401 after revoke, got $CODE"; exit 1; }
+
+echo "==> 429 rate_limited (rps=1 key, burst exceeded)"
+RATE_JSON=$(curl -fsS http://127.0.0.1:8090/admin/keys \
+  -H "Authorization: Bearer $(cat .llmberth-admin-token)" -d '{"name":"rate","rate_limit_rps":1}')
+RATE_KEY=$(printf '%s' "$RATE_JSON" | sed -n 's/.*"key":"\([^"]*\)".*/\1/p')
+RATE_ID=$(printf '%s' "$RATE_JSON" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+LIMITED=0
+for i in 1 2 3 4 5 6 7 8; do
+  RESP=$(curl -s http://127.0.0.1:8080/v1/chat/completions \
+    -H "Authorization: Bearer $RATE_KEY" -H "Content-Type: application/json" \
+    -d '{"model":"fake-chat","messages":[{"role":"user","content":"hi"}]}' || true)
+  case "$RESP" in
+    *rate_limited*) LIMITED=1; break ;;
+  esac
+done
+[ "$LIMITED" = "1" ] || { echo "FAIL: never hit rate_limited"; exit 1; }
+curl -fsS -X POST "http://127.0.0.1:8090/admin/keys/$RATE_ID/revoke" \
+  -H "Authorization: Bearer $(cat .llmberth-admin-token)" >/dev/null
+
+echo "==> 429 budget_exhausted (tiny per-key budget)"
+BUD_JSON=$(curl -fsS http://127.0.0.1:8090/admin/keys \
+  -H "Authorization: Bearer $(cat .llmberth-admin-token)" -d '{"name":"budget","budget_usd":0.0001}')
+BUD_KEY=$(printf '%s' "$BUD_JSON" | sed -n 's/.*"key":"\([^"]*\)".*/\1/p')
+BUD_ID=$(printf '%s' "$BUD_JSON" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+# First request passes (ledger sum still below budget) and books a cost;
+# the next request must be rejected with reason=budget_exhausted.
+curl -s -o /dev/null http://127.0.0.1:8080/v1/chat/completions \
+  -H "Authorization: Bearer $BUD_KEY" -H "Content-Type: application/json" \
+  -d '{"model":"fake-chat","messages":[{"role":"user","content":"spend one"}]}'
+BUD_RESP=$(curl -s http://127.0.0.1:8080/v1/chat/completions \
+  -H "Authorization: Bearer $BUD_KEY" -H "Content-Type: application/json" \
+  -d '{"model":"fake-chat","messages":[{"role":"user","content":"spend two"}]}')
+case "$BUD_RESP" in
+  *budget_exhausted*) echo "budget exhaustion OK: $BUD_RESP" ;;
+  *) echo "FAIL: expected budget_exhausted, got: $BUD_RESP"; exit 1 ;;
+esac
+curl -fsS -X POST "http://127.0.0.1:8090/admin/keys/$BUD_ID/revoke" \
+  -H "Authorization: Bearer $(cat .llmberth-admin-token)" >/dev/null
 
 echo "E2E PASSED ✓ (workdir kept: $WORK)"

@@ -1,0 +1,150 @@
+package main
+
+import (
+	"fmt"
+	"path/filepath"
+
+	"github.com/THY17308111153/llmberth/internal/admin"
+	"github.com/THY17308111153/llmberth/internal/scaffold"
+	"github.com/spf13/cobra"
+)
+
+// newKeysCmd assembles `llmberth keys add|list|revoke`. All three go through
+// the loopback admin API; full key material is shown exactly once (add).
+func newKeysCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "keys",
+		Short: "Manage the generated app's API keys via the loopback admin API",
+	}
+	cmd.AddCommand(newKeysAddCmd(), newKeysListCmd(), newKeysRevokeCmd())
+	return cmd
+}
+
+func newAdminClient(path string) (*admin.Client, error) {
+	dir, err := projectDir(path)
+	if err != nil {
+		return nil, err
+	}
+	manifest, err := loadManifest(dir)
+	if err != nil {
+		return nil, err
+	}
+	return admin.NewClient(dir, manifest, nil)
+}
+
+func loadManifest(dir string) (admin.Porter, error) {
+	return scaffold.LoadManifest(filepath.Join(dir, scaffold.ManifestFileName))
+}
+
+func newKeysAddCmd() *cobra.Command {
+	var (
+		path   string
+		name   string
+		budget float64
+		rps    int
+	)
+	cmd := &cobra.Command{
+		Use:   "add",
+		Short: "Create an API key (full key shown exactly once)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			client, err := newAdminClient(path)
+			if err != nil {
+				return err
+			}
+			req := admin.CreateKeyRequest{Name: name, RateLimitRPS: rps}
+			if budget > 0 {
+				req.BudgetUSD = &budget
+			}
+			res, err := client.CreateKey(cmd.Context(), req)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			fmt.Fprintln(out, "API key created (store it now — it is never displayed again):")
+			fmt.Fprintf(out, "  %s\n", res.Full)
+			fmt.Fprintf(out, "  id:     %s\n", res.ID)
+			fmt.Fprintf(out, "  prefix: %s\n", res.Prefix)
+			if budget > 0 {
+				fmt.Fprintf(out, "  budget: $%.2f/month (estimate-based)\n", budget)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&path, "path", "", "project directory (default: nearest .llmberth.yaml)")
+	cmd.Flags().StringVar(&name, "name", "", "human-readable key name")
+	cmd.Flags().Float64Var(&budget, "budget-usd", 0, "per-key monthly budget in USD (0 = none)")
+	cmd.Flags().IntVar(&rps, "rps", 0, "per-key rate limit (requests/sec; 0 = project default)")
+	return cmd
+}
+
+func newKeysListCmd() *cobra.Command {
+	var path string
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List API keys (prefixes only — never full keys)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			client, err := newAdminClient(path)
+			if err != nil {
+				return err
+			}
+			keys, err := client.ListKeys(cmd.Context())
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if len(keys) == 0 {
+				fmt.Fprintln(out, "No keys yet. Create one with `llmberth keys add`.")
+				return nil
+			}
+			fmt.Fprintf(out, "%-36s %-20s %-16s %-8s %s\n", "ID", "PREFIX", "NAME", "BUDGET", "STATE")
+			for _, k := range keys {
+				budget := "-"
+				if k.BudgetUSD != nil {
+					budget = fmt.Sprintf("$%.2f", *k.BudgetUSD)
+				}
+				state := "active"
+				if k.RevokedAt != nil {
+					state = "revoked"
+				}
+				fmt.Fprintf(out, "%-36s %-20s %-16s %-8s %s\n", k.ID, k.Prefix, k.Name, budget, state)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&path, "path", "", "project directory (default: nearest .llmberth.yaml)")
+	return cmd
+}
+
+func newKeysRevokeCmd() *cobra.Command {
+	var path string
+	cmd := &cobra.Command{
+		Use:   "revoke <id-or-prefix>",
+		Short: "Revoke a key — takes effect on the very next request",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := newAdminClient(path)
+			if err != nil {
+				return err
+			}
+			target := args[0]
+			// Accept either the full id or a display prefix.
+			id := target
+			keys, listErr := client.ListKeys(cmd.Context())
+			if listErr == nil {
+				for _, k := range keys {
+					if k.Prefix == target || k.ID == target {
+						id = k.ID
+						break
+					}
+				}
+			}
+			if err := client.RevokeKey(cmd.Context(), id); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Key %s revoked — the next request with it will be rejected.\n", id)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&path, "path", "", "project directory (default: nearest .llmberth.yaml)")
+	return cmd
+}

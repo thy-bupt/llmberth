@@ -1,0 +1,135 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/THY17308111153/llmberth/internal/runtime"
+	"github.com/THY17308111153/llmberth/internal/scaffold"
+	"github.com/spf13/cobra"
+)
+
+// projectDir resolves the llmberth project root for commands that require
+// one: explicit --path, else walk up from cwd to .llmberth.yaml.
+func projectDir(pathFlag string) (string, error) {
+	if pathFlag != "" {
+		return pathFlag, nil
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	return scaffold.FindManifest(cwd)
+}
+
+func withSignalCtx() (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.Background())
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sig
+		cancel()
+	}()
+	return ctx, cancel
+}
+
+func newUpCmd() *cobra.Command {
+	var path string
+	cmd := &cobra.Command{
+		Use:   "up",
+		Short: "Start the project's compose stack (postgres + app) and wait for health",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			dir, err := projectDir(path)
+			if err != nil {
+				return err
+			}
+			ctx, cancel := withSignalCtx()
+			defer cancel()
+			fmt.Fprintln(cmd.OutOrStdout(), "Starting stack (docker compose up -d --wait)…")
+			if err := runtime.Up(ctx, dir); err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "Stack is up. Public API on 127.0.0.1, admin API on 127.0.0.1 only.")
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&path, "path", "", "project directory (default: nearest .llmberth.yaml)")
+	return cmd
+}
+
+func newStopCmd() *cobra.Command {
+	var path string
+	cmd := &cobra.Command{
+		Use:   "stop",
+		Short: "Stop and remove the project's compose stack (volume kept)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			dir, err := projectDir(path)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "Stopping stack (docker compose down)…")
+			return runtime.Stop(context.Background(), dir)
+		},
+	}
+	cmd.Flags().StringVar(&path, "path", "", "project directory (default: nearest .llmberth.yaml)")
+	return cmd
+}
+
+func newStatusCmd() *cobra.Command {
+	var path string
+	cmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show compose service health and ports",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			dir, err := projectDir(path)
+			if err != nil {
+				return err
+			}
+			out, err := runtime.StatusRaw(context.Background(), dir)
+			if err != nil {
+				return err
+			}
+			_, _ = cmd.OutOrStdout().Write(out)
+			fmt.Fprintln(cmd.OutOrStdout())
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&path, "path", "", "project directory (default: nearest .llmberth.yaml)")
+	return cmd
+}
+
+func newLogsCmd() *cobra.Command {
+	var (
+		path    string
+		follow  bool
+		service string
+	)
+	cmd := &cobra.Command{
+		Use:   "logs [-f] [service]",
+		Short: "Show stack logs (app or postgres), optionally streaming",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir, err := projectDir(path)
+			if err != nil {
+				return err
+			}
+			svc := runtime.Service("")
+			if len(args) == 1 {
+				svc, err = runtime.ParseService(args[0])
+				if err != nil {
+					return err
+				}
+			}
+			ctx, cancel := withSignalCtx()
+			defer cancel()
+			return runtime.Logs(ctx, dir, svc, follow, os.Stdout, os.Stderr)
+		},
+	}
+	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "stream logs until interrupted")
+	cmd.Flags().StringVar(&service, "service", "", "shorthand for the positional service argument")
+	cmd.Flags().StringVar(&path, "path", "", "project directory (default: nearest .llmberth.yaml)")
+	return cmd
+}

@@ -39,6 +39,12 @@ linters:
         linters:
           - gosec
         text: "G304|G306"
+      # The CLI reads operator-controlled project files (.env, admin token)
+      # by design; paths resolve from .llmberth.yaml discovery, not raw input.
+      - path: (internal/admin|internal/runtime|cmd/llmberth)/
+        linters:
+          - gosec
+        text: "G304"
 
 issues:
   max-issues-per-linter: 0

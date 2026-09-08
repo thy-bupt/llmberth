@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
     prefix         text NOT NULL,
     scopes         text[] NOT NULL DEFAULT '{chat}',
     rate_limit_rps integer NOT NULL DEFAULT 5,
-    budget_usd     numeric(12, 2),
+    budget_usd     numeric(12, 6),
     revoked_at     timestamptz,
     created_at     timestamptz NOT NULL DEFAULT now()
 );

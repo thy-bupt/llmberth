@@ -26,7 +26,16 @@ No telemetry. No platform lock-in.`,
 	root.Version = version
 	root.SetVersionTemplate("llmberth {{.Version}}\n")
 	root.CompletionOptions.HiddenDefaultCmd = true
-	root.AddCommand(newInitCmd())
+	root.AddCommand(
+		newInitCmd(),
+		newDevCmd(),
+		newUpCmd(),
+		newStopCmd(),
+		newStatusCmd(),
+		newLogsCmd(),
+		newKeysCmd(),
+		newDoctorCmd(),
+	)
 	return root
 }
 

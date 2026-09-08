@@ -1,0 +1,17 @@
+# .air.toml — hot reload config for `llmberth dev` (and manual `air` runs).
+# Env (secrets, DATABASE_URL) is injected by `llmberth dev` from .env.
+root = "."
+tmp_dir = "bin/air"
+
+[build]
+cmd = "go build -o ./bin/app ."
+bin = "./bin/app"
+include_ext = ["go"]
+exclude_dir = ["bin", "static", "docs"]
+delay = 500
+
+[log]
+time = false
+
+[misc]
+clean_on_exit = true

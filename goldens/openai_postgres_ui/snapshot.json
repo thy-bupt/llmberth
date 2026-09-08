@@ -1,5 +1,9 @@
 [
   {
+    "path": ".air.toml",
+    "sha256": "7e1462081b4e23ff31a17ee02179b05d85ef4f03f521137d26c4d89409e13d95"
+  },
+  {
     "path": ".dockerignore",
     "sha256": "45fb4059ee6e1eac197e04f59e905eeba9313a99c8dcb32e961c33a084b1a874"
   },
@@ -25,7 +29,7 @@
   },
   {
     "path": "Makefile",
-    "sha256": "2376b6668feb19b975185431e2cc75b37cca9889874fadb824665d51b39966cb"
+    "sha256": "8c04cddfc0de3b01058d15b75c7fb1eb4a4ab1b7c6c3335f00f8694ee86321fe"
   },
   {
     "path": "README.md",
@@ -73,7 +77,7 @@
   },
   {
     "path": "internal/cost/models.yaml",
-    "sha256": "c7607e33cc0671931279ff7b03d4c0677217ad07f28a351cb1dc1d9f461668e6"
+    "sha256": "cb04ea8276b18f11eb59446b6842e59b010e20c1f99218eda8918c71b56d23b5"
   },
   {
     "path": "internal/keys/keys.go",
@@ -109,7 +113,7 @@
   },
   {
     "path": "internal/store/migrations/0001_init.up.sql",
-    "sha256": "c812b018d7fdb517930cd1155bb37641cbcc0bb45db4d62556f6176ef3af7d87"
+    "sha256": "47d8632c68af6fd94fea7c51dab7097542fa24745aa08909b2ee8387b25f9e40"
   },
   {
     "path": "internal/store/queries.go",

@@ -8,4 +8,7 @@ models:
   qwen-plus:       { input: 0.40, output: 1.20 }
   qwen-max:        { input: 1.60, output: 6.40 }
   llama3.1:        { input: 0.00, output: 0.00 }
-  fake-chat:       { input: 0.00, output: 0.00 }
+  # fake-chat carries non-zero prices on purpose: it lets demos, tests and
+  # e2e exercise the full cost-estimation and budget-exhaustion path (a
+  # $0 model can never trip a budget).
+  fake-chat:       { input: 10.00, output: 30.00 }

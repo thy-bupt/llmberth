@@ -61,6 +61,12 @@ func NewManifest(opts Options, cliVersion, templateVersion string) Manifest {
 // ManifestFileName is the marker file that makes a directory a llmberth project.
 const ManifestFileName = ".llmberth.yaml"
 
+// AdminPort satisfies admin.AdminPorter.
+func (m Manifest) AdminPort() int { return m.Services.App.AdminPort }
+
+// AppPort returns the public API port.
+func (m Manifest) AppPort() int { return m.Services.App.Port }
+
 // WriteManifest marshals m to path with 0600-ish safe defaults (it is not
 // secret, but no reason to be world-writable either).
 func WriteManifest(path string, m Manifest) error {
