@@ -2,7 +2,7 @@
 .PHONY: build test tidy up stop logs psql clean
 
 build:
-	go build -o bin/app .
+	go build -mod=mod -o bin/app .
 
 test:
 	go test ./...

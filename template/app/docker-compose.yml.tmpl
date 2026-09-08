@@ -29,7 +29,12 @@ services:
     restart: unless-stopped
 
   app:
-    build: .
+    build:
+      context: .
+      args:
+        # Module proxy override for the build stage (regional mirrors); set
+        # GOPROXY in .env, defaults to the official proxy.
+        GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
     depends_on:
       postgres:
         condition: service_healthy

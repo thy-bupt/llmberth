@@ -4,7 +4,10 @@ root = "."
 tmp_dir = "bin/air"
 
 [build]
-cmd = "go build -o ./bin/app ."
+# -mod=mod: a fresh project has no go.sum yet; this lets build/run work
+# without a manual `go mod tidy` first (checksums are synthesized, same as
+# the container build in the Dockerfile).
+cmd = "go build -mod=mod -o ./bin/app ."
 bin = "./bin/app"
 include_ext = ["go"]
 exclude_dir = ["bin", "static", "docs"]

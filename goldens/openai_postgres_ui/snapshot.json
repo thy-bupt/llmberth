@@ -1,7 +1,7 @@
 [
   {
     "path": ".air.toml",
-    "sha256": "7e1462081b4e23ff31a17ee02179b05d85ef4f03f521137d26c4d89409e13d95"
+    "sha256": "39243f0f94dd3ed3c31fd7e5ba7c84025915ad853131e9c6e2c535120b4e4746"
   },
   {
     "path": ".dockerignore",
@@ -25,11 +25,11 @@
   },
   {
     "path": "Dockerfile",
-    "sha256": "7ae309198c7ff695e45a2253ed33d903f78fa5ce36ba7c9c97e324065ae4a9c6"
+    "sha256": "259e4889b8a7700e1374b16c08999866373b1d5fc7c98e64b26f19cefa602ee9"
   },
   {
     "path": "Makefile",
-    "sha256": "8c04cddfc0de3b01058d15b75c7fb1eb4a4ab1b7c6c3335f00f8694ee86321fe"
+    "sha256": "7286c01aa7617c391609ddaad9bbf32606cd26d5eb0157333e95bfd9dcc6faa2"
   },
   {
     "path": "README.md",
@@ -37,7 +37,7 @@
   },
   {
     "path": "docker-compose.yml",
-    "sha256": "7ce5ed80cce493eb3a61d9b70370fc824ec575d52f5138c2fd23d158725cf103"
+    "sha256": "4b8320e6df42c24b99faeca2bfd16435975c4bac933e5fb45e5b24c9f3ae7c82"
   },
   {
     "path": "go.mod",

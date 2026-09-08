@@ -1,10 +1,18 @@
 # Multi-stage build: static binary, distroless runtime, non-root.
 FROM golang:1.25-alpine AS build
+# The module proxy is overridable via compose build args (GOPROXY in .env);
+# default stays the official proxy, override for regional mirrors.
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV GOPROXY=$GOPROXY
 WORKDIR /src
-COPY go.mod go.sum ./
+# A freshly generated project has no go.sum yet (the template cannot pin
+# checksums for you), and BuildKit may cache the download step from a
+# previous build — so no `COPY go.sum` here: -mod=mod synthesizes checksums
+# in the build layer when they are absent.
+COPY go.mod ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/app .
+RUN CGO_ENABLED=0 GOFLAGS=-mod=mod go build -trimpath -ldflags="-s -w" -o /out/app .
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/app /app
