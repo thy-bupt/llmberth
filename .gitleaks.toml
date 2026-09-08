@@ -1,0 +1,10 @@
+# Gitleaks configuration for llmberth. Default rules apply; the only
+# allowlist entry is the README/CLI example placeholder — never a real
+# credential (plan §5.8: examples carry placeholders only).
+[extend]
+useDefault = true
+
+[[allowlist]]
+regexes = [
+  '''Bearer lbt_live_YOUR_API_KEY''',
+]
