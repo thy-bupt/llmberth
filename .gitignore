@@ -11,6 +11,8 @@
 .env
 .env.*
 !.env.example
+# ...but template SOURCES must be tracked: their names merely look like .env
+!template/**/*.tmpl
 
 # Admin token (generated per-project by llmberth init)
 .llmberth-admin-token
@@ -23,3 +25,6 @@
 
 # Golden test scratch output
 /.goldenbin/
+
+# Security-hook session artifacts (never part of the repo).
+.mimosa/

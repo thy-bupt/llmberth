@@ -175,15 +175,31 @@ func TestGolden(t *testing.T) {
 			var wantFiles, gotFiles []fileHash
 			_ = json.Unmarshal(want, &wantFiles)
 			_ = json.Unmarshal(got, &gotFiles)
-			seen := map[string]string{}
+			gotMap := map[string]string{}
+			for _, f := range gotFiles {
+				gotMap[f.Path] = f.Sha
+			}
+			wantMap := map[string]string{}
 			for _, f := range wantFiles {
-				seen[f.Path] = f.Sha
+				wantMap[f.Path] = f.Sha
 			}
 			changed := 0
 			for _, f := range gotFiles {
-				if seen[f.Path] != f.Sha {
+				if wantMap[f.Path] != f.Sha {
 					t.Errorf("template drift in %q (sha changed)", f.Path)
 					if changed++; changed >= 5 {
+						break
+					}
+				}
+			}
+			// Missing detection: a file present in the snapshot but absent
+			// from the generated tree — e.g. silently dropped by .gitignore
+			// and lost on a fresh clone.
+			missed := 0
+			for _, f := range wantFiles {
+				if _, exists := gotMap[f.Path]; !exists {
+					t.Errorf("file %q is in the snapshot but NOT generated (missing from template?)", f.Path)
+					if missed++; missed >= 5 {
 						break
 					}
 				}
