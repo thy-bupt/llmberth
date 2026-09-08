@@ -34,6 +34,7 @@ No telemetry. No platform lock-in.`,
 		newStatusCmd(),
 		newLogsCmd(),
 		newKeysCmd(),
+		newUsageCmd(),
 		newDoctorCmd(),
 	)
 	return root

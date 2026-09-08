@@ -54,12 +54,16 @@ func runDev(cmd *cobra.Command, path string) error {
 	}
 
 	// 3. Host-side env: DATABASE_URL must point at the loopback-published
-	// port, not the in-container hostname.
+	// port, not the in-container hostname. Keychain upstream keys are
+	// overlaid last so they win over .env (plan §5.1).
 	envFile, err := parseEnvFile(filepath.Join(dir, ".env"))
 	if err != nil {
 		return err
 	}
 	appEnv := buildDevEnv(envFile)
+	if overlay, err := keychainOverlay(); err == nil {
+		appEnv = append(appEnv, overlay...)
+	}
 
 	// 4. air when available, otherwise `go run .` (still hot-restartable by
 	// the operator; the message says which one).

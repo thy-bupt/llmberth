@@ -89,9 +89,14 @@ func run(c *exec.Cmd) ([]byte, error) {
 	return out, nil
 }
 
-// Up brings the whole stack up and waits for health.
-func Up(ctx context.Context, dir string) error {
+// Up brings the whole stack up and waits for health. extraEnv (KEY=VALUE
+// pairs, e.g. keychain overlays) is merged into the compose subprocess
+// environment so ${VAR} interpolation can pick it up.
+func Up(ctx context.Context, dir string, extraEnv []string) error {
 	c := composeUpCmd(dir)
+	if len(extraEnv) > 0 {
+		c.Env = append(os.Environ(), extraEnv...)
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}

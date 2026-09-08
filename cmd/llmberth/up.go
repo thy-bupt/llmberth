@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
+	"time"
 
+	"github.com/THY17308111153/llmberth/internal/admin"
 	"github.com/THY17308111153/llmberth/internal/runtime"
 	"github.com/THY17308111153/llmberth/internal/scaffold"
+	"github.com/THY17308111153/llmberth/internal/usage"
 	"github.com/spf13/cobra"
 )
 
@@ -46,10 +50,18 @@ func newUpCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Keychain overlay: stored upstream keys win over .env without
+			// touching it (plan §5.1). A broken keychain does not block up.
+			var extra []string
+			if overlay, err := keychainOverlay(); err == nil {
+				extra = overlay
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "note: keychain unavailable (%v) — continuing with .env values\\n", err)
+			}
 			ctx, cancel := withSignalCtx()
 			defer cancel()
 			fmt.Fprintln(cmd.OutOrStdout(), "Starting stack (docker compose up -d --wait)…")
-			if err := runtime.Up(ctx, dir); err != nil {
+			if err := runtime.Up(ctx, dir, extra); err != nil {
 				return err
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), "Stack is up. Public API on 127.0.0.1, admin API on 127.0.0.1 only.")
@@ -108,6 +120,17 @@ func newStatusCmd() *cobra.Command {
 					state = state + " (" + s.Health + ")"
 				}
 				fmt.Fprintf(out, "%-12s %-10s %-28s %s\n", s.Service, state, "", s.Published)
+			}
+			// Budget line (plan §3: status surfaces the consumption ratio).
+			// Show it only when the admin API is reachable; never fail the
+			// status command over it.
+			if mm, err := scaffold.LoadManifest(filepath.Join(dir, scaffold.ManifestFileName)); err == nil {
+				if client, err := admin.NewClient(dir, mm, nil); err == nil {
+					monthStart := time.Date(time.Now().Year(), time.Now().Month(), 1, 0, 0, 0, 0, time.UTC)
+					if res, err := client.Usage(context.Background(), "", monthStart); err == nil {
+						usage.RenderBudget(out, usage.Summarize(res, mm.Budget.MonthlyUSD))
+					}
+				}
 			}
 			return nil
 		},

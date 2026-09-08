@@ -16,7 +16,7 @@ func newKeysCmd() *cobra.Command {
 		Use:   "keys",
 		Short: "Manage the generated app's API keys via the loopback admin API",
 	}
-	cmd.AddCommand(newKeysAddCmd(), newKeysListCmd(), newKeysRevokeCmd())
+	cmd.AddCommand(newKeysAddCmd(), newKeysListCmd(), newKeysRevokeCmd(), newUpstreamCmd())
 	return cmd
 }
 
