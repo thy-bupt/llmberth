@@ -29,7 +29,7 @@
   },
   {
     "path": "Dockerfile",
-    "sha256": "259e4889b8a7700e1374b16c08999866373b1d5fc7c98e64b26f19cefa602ee9"
+    "sha256": "4fd49a1b588f636de0ac1ddfeaaec4a8722fa3b607b7c60babb3a18b6532a496"
   },
   {
     "path": "Makefile",
@@ -41,11 +41,11 @@
   },
   {
     "path": "docker-compose.prod.yml",
-    "sha256": "cdd796123ffcf4185d0159a3c659d5da128f860a45441d50503633a07f03ed68"
+    "sha256": "cf11a9c245c933c8262c2e7bbeec2a4eee4a6f62641056fd8af680f1a7fa3f1f"
   },
   {
     "path": "docker-compose.yml",
-    "sha256": "4b8320e6df42c24b99faeca2bfd16435975c4bac933e5fb45e5b24c9f3ae7c82"
+    "sha256": "5168d5521ae12575a90c2db04d630102d6414052f6382ee4bb18d230ee1a9790"
   },
   {
     "path": "go.mod",

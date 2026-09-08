@@ -22,7 +22,8 @@ services:
     ports: !reset []
 
   caddy:
-    image: caddy:2-alpine
+    # Digest-pinned (doctor --security item 5): caddy 2-alpine, 2026-09-08.
+    image: caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
     depends_on:
       app:
         condition: service_started

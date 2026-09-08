@@ -10,7 +10,8 @@
 
 services:
   postgres:
-    image: postgres:{{.Manifest.Services.Postgres.Version}}-alpine
+    # Digest-pinned (doctor --security item 5): postgres 16-alpine, 2026-09-08.
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
     environment:
       POSTGRES_USER: llmberth
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -49,6 +50,11 @@ services:
     ports:
       - "127.0.0.1:${APP_PORT:-8080}:8080"
       - "127.0.0.1:${ADMIN_PORT:-8090}:8090"
+    # Read-only rootfs + tmpfs scratch (doctor --security item 7): the app
+    # never writes to its own image layer.
+    read_only: true
+    tmpfs:
+      - /tmp
     networks:
       - internal
     restart: unless-stopped

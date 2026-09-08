@@ -27,6 +27,17 @@ const (
 	Fail
 )
 
+func (s Severity) String() string {
+	switch s {
+	case Warn:
+		return "warn"
+	case Fail:
+		return "fail"
+	default:
+		return "ok"
+	}
+}
+
 // Check is one doctor finding.
 type Check struct {
 	Name  string

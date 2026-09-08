@@ -1,5 +1,6 @@
-# Multi-stage build: static binary, distroless runtime, non-root.
-FROM golang:1.25-alpine AS build
+# Multi-stage build: static binary, distroless runtime, non-root. Base
+# images are pinned by digest (plan §5.4 / doctor --security item 5).
+FROM golang:1.25-alpine@sha256:1ae0735f00daffa3aaf1363a5184c0d2dc55c78e3db4ec70241cdac97bf84b59 AS build
 # The module proxy is overridable via compose build args (GOPROXY in .env);
 # default stays the official proxy, override for regional mirrors.
 ARG GOPROXY=https://proxy.golang.org,direct
@@ -14,7 +15,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOFLAGS=-mod=mod go build -trimpath -ldflags="-s -w" -o /out/app .
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 COPY --from=build /out/app /app
 USER nonroot:nonroot
 EXPOSE 8080 8090

@@ -22,9 +22,17 @@ func newDoctorCmd() *cobra.Command {
 				return fmt.Errorf("%w (doctor needs a project; use --path to point at one)", err)
 			}
 			if security {
-				// The 12-point security audit lands with M4 (v0.4); refuse
-				// quietly rather than pretending to check.
-				return fmt.Errorf("--security arrives with v0.4 (M4); basic checks only in v0.2")
+				// The twelve-item security audit (plan §5.7).
+				checks, err := runtime.CheckSecurity(dir)
+				if err != nil {
+					return err
+				}
+				res := runtime.DoctorResult{Checks: checks}
+				res.Render(cmd.OutOrStdout())
+				if res.HasFail() {
+					os.Exit(1)
+				}
+				return nil
 			}
 			ctx, cancel := withSignalCtx()
 			defer cancel()
