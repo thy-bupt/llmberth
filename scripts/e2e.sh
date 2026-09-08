@@ -14,6 +14,16 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
+echo "==> preflight: stale e2e-app containers from failed runs"
+STALE=$(docker ps -aq --filter name=e2e-app- 2>/dev/null)
+if [ -n "$STALE" ]; then
+  echo "  removing leftover containers: $STALE"
+  docker rm -f $STALE >/dev/null 2>&1 || echo "  WARNING: could not remove leftovers"
+  # OrbStack/desktop daemons may hold port proxies briefly after a forced
+  # removal; give them a moment so the (reused) loopback ports are free.
+  sleep 3
+fi
+
 echo "==> building llmberth"
 (cd "$REPO" && go build -o "$WORK/llmberth" ./cmd/llmberth)
 
@@ -34,7 +44,9 @@ docker compose up -d --build --wait
 
 cleanup() {
   echo "==> compose down"
-  docker compose down -v --remove-orphans >/dev/null 2>&1 || true
+  if ! docker compose down -v --remove-orphans >/dev/null 2>&1; then
+    echo "WARNING: compose down failed — leftover containers may occupy ports; run 'docker ps' and clean up before rerunning."
+  fi
 }
 trap cleanup EXIT
 
