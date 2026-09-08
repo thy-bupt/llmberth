@@ -15,7 +15,6 @@ jobs:
       - uses: googleapis/release-please-action@v4
         with:
           release-type: go
-          package-name: llmberth
       - uses: actions/checkout@v4
         if: ${{ steps.release.outputs.release_created }}
       - uses: actions/setup-go@v5
