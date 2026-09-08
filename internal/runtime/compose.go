@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -166,8 +167,9 @@ func ParseStatus(raw []byte) ([]StatusRow, error) {
 	return rows, nil
 }
 
-// Logs prints recent logs; with follow it streams until ctx is done.
-func Logs(ctx context.Context, dir string, service Service, follow bool, stdout, stderr *os.File) error {
+// Logs prints recent logs; with follow it streams until ctx is done. Writer
+// targets make it usable by both the CLI and the TUI logs page.
+func Logs(ctx context.Context, dir string, service Service, follow bool, stdout, stderr io.Writer) error {
 	var c *exec.Cmd
 	switch {
 	case service != "" && follow:

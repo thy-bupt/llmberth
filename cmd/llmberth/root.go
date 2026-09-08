@@ -36,6 +36,7 @@ No telemetry. No platform lock-in.`,
 		newKeysCmd(),
 		newUsageCmd(),
 		newDoctorCmd(),
+		newTuiCmd(),
 	)
 	return root
 }
