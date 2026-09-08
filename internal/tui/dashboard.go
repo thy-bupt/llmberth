@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/THY17308111153/llmberth/internal/runtime"
-	"github.com/THY17308111153/llmberth/internal/usage"
+	"github.com/thy-bupt/llmberth/internal/runtime"
+	"github.com/thy-bupt/llmberth/internal/usage"
 )
 
 // refreshDashboard pulls stack status and usage windows through internal

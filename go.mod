@@ -1,4 +1,4 @@
-module github.com/THY17308111153/llmberth
+module github.com/thy-bupt/llmberth
 
 go 1.25
 

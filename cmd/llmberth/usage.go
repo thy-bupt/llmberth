@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/THY17308111153/llmberth/internal/admin"
-	"github.com/THY17308111153/llmberth/internal/scaffold"
-	"github.com/THY17308111153/llmberth/internal/usage"
+	"github.com/thy-bupt/llmberth/internal/admin"
+	"github.com/thy-bupt/llmberth/internal/scaffold"
+	"github.com/thy-bupt/llmberth/internal/usage"
 	"github.com/spf13/cobra"
 )
 

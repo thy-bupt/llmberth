@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/THY17308111153/llmberth/internal/scaffold"
+	"github.com/thy-bupt/llmberth/internal/scaffold"
 	tea "github.com/charmbracelet/bubbletea"
 )
 

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/THY17308111153/llmberth/internal/keys"
+	"github.com/thy-bupt/llmberth/internal/keys"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )

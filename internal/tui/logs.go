@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/THY17308111153/llmberth/internal/runtime"
+	"github.com/thy-bupt/llmberth/internal/runtime"
 )
 
 // refreshLogs starts the streaming log reader (internal/runtime) and pushes

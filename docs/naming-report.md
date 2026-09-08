@@ -2,7 +2,7 @@
 
 ## 结论
 
-**定名 `llmberth`**。go module path：`github.com/THY17308111153/llmberth`（用户当前账号，后续可迁组织）。CLI 二进制/命令名：`llmberth`。
+**定名 `llmberth`**。go module path：`github.com/thy-bupt/llmberth`（用户当前账号，后续可迁组织）。CLI 二进制/命令名：`llmberth`。
 
 ## 核查矩阵
 

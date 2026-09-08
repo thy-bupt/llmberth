@@ -9,9 +9,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/THY17308111153/llmberth/internal/keys"
-	"github.com/THY17308111153/llmberth/internal/scaffold"
-	"github.com/THY17308111153/llmberth/template"
+	"github.com/thy-bupt/llmberth/internal/keys"
+	"github.com/thy-bupt/llmberth/internal/scaffold"
+	"github.com/thy-bupt/llmberth/template"
 	"github.com/spf13/cobra"
 )
 

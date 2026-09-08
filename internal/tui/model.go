@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/THY17308111153/llmberth/internal/admin"
-	"github.com/THY17308111153/llmberth/internal/scaffold"
+	"github.com/thy-bupt/llmberth/internal/admin"
+	"github.com/thy-bupt/llmberth/internal/scaffold"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )

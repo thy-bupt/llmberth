@@ -1,5 +1,5 @@
 BINARY := llmberth
-MODULE  := github.com/THY17308111153/llmberth
+MODULE  := github.com/thy-bupt/llmberth
 
 GO      ?= go
 LINT    ?= golangci-lint

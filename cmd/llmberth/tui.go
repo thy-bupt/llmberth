@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/THY17308111153/llmberth/internal/tui"
+	"github.com/thy-bupt/llmberth/internal/tui"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )

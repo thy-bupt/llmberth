@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/THY17308111153/llmberth/internal/runtime"
+	"github.com/thy-bupt/llmberth/internal/runtime"
 	"github.com/spf13/cobra"
 )
 

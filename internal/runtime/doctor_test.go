@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/THY17308111153/llmberth/internal/scaffold"
+	"github.com/thy-bupt/llmberth/internal/scaffold"
 )
 
 // writeTestProject creates a minimal project skeleton for doctor tests.
