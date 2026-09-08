@@ -57,19 +57,23 @@ as security homework:
 
 ```console
 llmberth init <name>        # generate: source is yours from commit one
-llmberth dev                # postgres + host app with air hot reload
-llmberth up / stop / status # manage the compose stack
+llmberth dev                # postgres + app with air hot reload
+llmberth up / stop / status # manage the compose stack (status shows budget)
 llmberth logs [-f] [app|postgres]
-llmberth keys add|list|revoke   # via loopback admin API; full key shown once
+llmberth keys add|list|revoke
+llmberth keys upstream set|get|list|delete   # OS keychain / encrypted file
+llmberth usage [--since] [--by key|model]    # ledger aggregates (estimates)
+llmberth tui                # dashboard / keys / logs console
 llmberth doctor             # docker/compose, .env completeness, reachability
-llmberth usage [--by key|model] # ledger aggregates             (M3, v0.3)
-llmberth tui                # dashboard / keys / logs         (M3, v0.3)
 llmberth doctor --security  # 12-point audit + Caddy TLS      (M4, v0.4)
 ```
 
-v0.2 (current) delivers the lifecycle commands and the keys workflow.
-The TUI lands in v0.3, Caddy TLS + `doctor --security` in v0.4.
-See [PLAN.md](../PLAN.md) for the milestone map.
+v0.3 (current) adds `usage`, budget alerts and the TUI console. The TUI
+covers Dashboard (health + usage windows + budget), Keys (create/revoke,
+full key shown once) and Logs (streaming with level filter) — and is a pure
+view on the same internal packages the CLI uses, so the two can never drift.
+Caddy TLS + `doctor --security` land in v0.4. See [PLAN.md](../PLAN.md) for
+the milestone map.
 
 ## Architecture
 
