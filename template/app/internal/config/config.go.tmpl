@@ -31,7 +31,8 @@ type Config struct {
 	RateLimitRPS   float64 // default per-key requests/sec
 	BudgetMonthly  float64 // global monthly budget, USD (0 = disabled)
 	CORSOrigins    []string
-	LogMessages    bool // opt-in logging of message bodies (off by default)
+	LogMessages    bool     // opt-in logging of message bodies (off by default)
+	HooksDisabled  []string // hook names skipped by the request-inspection layer
 	Env            string
 }
 
@@ -52,6 +53,7 @@ func Load() (Config, error) {
 		BudgetMonthly: getFloat("BUDGET_MONTHLY_USD", {{printf "%.2f" .Manifest.Budget.MonthlyUSD}}),
 		Env:           getenv("APP_ENV", "dev"),
 		LogMessages:   getBool("LOG_MESSAGES", false),
+		HooksDisabled: strings.Split(getenv("HOOKS_DISABLED", ""), ","),
 	}
 
 	origins := getenv("CORS_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080")

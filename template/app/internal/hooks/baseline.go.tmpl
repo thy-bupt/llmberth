@@ -1,0 +1,45 @@
+package hooks
+
+import (
+	"regexp"
+
+	"{{.Module}}/internal/provider"
+)
+
+// Baseline is the example hook shipped with v0.4 (plan §5.5): a conservative
+// prompt-injection pattern check over user messages. It is heuristic — a
+// filter, not a guarantee; the hard guardrails (input caps, budgets, rate
+// limits) remain the binding controls. Opt out with HOOKS_DISABLED=baseline.
+type Baseline struct{}
+
+// Name identifies the hook for HOOKS_DISABLED.
+func (Baseline) Name() string { return "baseline" }
+
+// patterns are case-insensitive and intentionally narrow to keep false
+// positives low; extend per product needs.
+var baselinePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)ignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions|prompts|rules)`),
+	regexp.MustCompile(`(?i)disregard\s+(all\s+)?(previous|prior|above|your)\s+(instructions|prompts|rules)`),
+	regexp.MustCompile(`(?i)reveal\s+(your\s+|the\s+)?(system\s+)?(prompt|instructions|rules)`),
+	regexp.MustCompile(`(?i)(show|print|output)\s+(me\s+)?(your\s+|the\s+)?(system\s+)?(prompt|instructions)\b`),
+	regexp.MustCompile(`(?i)developer\s+mode\s+(is\s+)?(now\s+)?enabled`),
+	regexp.MustCompile(`(?i)you\s+are\s+now\s+(a|an|no longer)\b`),
+}
+
+// Inspect scans user messages for injection-shaped instructions.
+func (Baseline) Inspect(req provider.ChatRequest) *Finding {
+	for _, m := range req.Messages {
+		if m.Role != "user" {
+			continue
+		}
+		for _, re := range baselinePatterns {
+			if re.MatchString(m.Content) {
+				return &Finding{
+					Hook:   "baseline",
+					Reason: "request matches a known prompt-injection pattern; adjust the message or disable the baseline hook (HOOKS_DISABLED=baseline)",
+				}
+			}
+		}
+	}
+	return nil
+}

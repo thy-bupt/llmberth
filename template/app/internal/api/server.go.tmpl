@@ -16,6 +16,7 @@ import (
 
 	"{{.Module}}/internal/config"
 	"{{.Module}}/internal/cost"
+	"{{.Module}}/internal/hooks"
 	"{{.Module}}/internal/keys"
 	"{{.Module}}/internal/provider"
 	"{{.Module}}/internal/store"
@@ -28,6 +29,7 @@ type Server struct {
 	provider provider.Provider
 	cache    *keys.Cache
 	cost     *cost.Table
+	hooks    *hooks.Registry
 
 	limMu    sync.Mutex
 	limiters map[string]*rate.Limiter
@@ -63,8 +65,12 @@ func New(cfg config.Config, st *store.Store) (*Server, error) {
 		provider: p,
 		cache:    keys.NewCache(),
 		cost:     cost.DefaultTable(),
+		hooks:    hooks.NewRegistry(cfg.HooksDisabled),
 		limiters: map[string]*rate.Limiter{},
 	}
+	// Baseline request inspection ships enabled (plan §5.5 example hook);
+	// opt out per hook with HOOKS_DISABLED=baseline.
+	s.hooks.Register(hooks.Baseline{})
 
 	s.http = &http.Server{
 		Addr:              cfg.Port,

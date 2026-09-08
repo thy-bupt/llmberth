@@ -96,6 +96,14 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		model = s.cfg.Model
 	}
 	preq := provider.ChatRequest{Model: model, Messages: req.Messages}
+
+	// Pluggable request inspection (plan §5.5): hooks run before any
+	// upstream call; a finding rejects with 400 hook_rejected.
+	if f := s.hooks.Inspect(preq); f != nil {
+		slog.Info("hook rejected request", "hook", f.Hook)
+		apiError(w, http.StatusBadRequest, "hook_rejected", f.Reason)
+		return
+	}
 	s.reqTotal.Add(1)
 
 	if req.Stream {

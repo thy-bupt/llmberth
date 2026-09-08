@@ -87,12 +87,12 @@ curl -fsS "http://127.0.0.1:8090/admin/usage?by=model" \
   -H "Authorization: Bearer $(cat .llmberth-admin-token)" | grep -q 'fake-chat'
 
 echo "==> usage CLI (by model, budget line)"
-CLI_USAGE=$(/tmp/llmberth usage --by model)
+CLI_USAGE=$("$WORK/llmberth" usage --by model)
 echo "$CLI_USAGE" | grep -q 'fake-chat' || { echo "FAIL: usage CLI missing model row"; exit 1; }
 echo "$CLI_USAGE" | grep -q 'Monthly budget' || { echo "FAIL: usage CLI missing budget line"; exit 1; }
 
 echo "==> status budget line"
-/tmp/llmberth status | grep -q 'budget:' || { echo "FAIL: status missing budget line"; exit 1; }
+"$WORK/llmberth" status | grep -q 'budget:' || { echo "FAIL: status missing budget line"; exit 1; }
 
 echo "==> revoke -> instant 401"
 curl -fsS -X POST "http://127.0.0.1:8090/admin/keys/$KEY_ID/revoke" \

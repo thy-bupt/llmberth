@@ -1,0 +1,69 @@
+// Package hooks is the pluggable request-inspection layer of the generated
+// app (plan §5.5 / M5 template-plugin seed): middlewares that inspect a chat
+// request before it reaches the provider. Hooks are fail-closed by default —
+// a Finding rejects the request with 400 hook_rejected; individual hooks can
+// be disabled via HOOKS_DISABLED=name1,name2.
+package hooks
+
+import (
+	"strings"
+
+	"{{.Module}}/internal/provider"
+)
+
+// Finding describes why a hook rejected a request.
+type Finding struct {
+	Hook   string
+	Reason string
+}
+
+// Hook inspects a chat request; nil means allowed.
+type Hook interface {
+	Name() string
+	Inspect(req provider.ChatRequest) *Finding
+}
+
+// Registry runs registered hooks in order and returns the first finding.
+type Registry struct {
+	hooks    []Hook
+	disabled map[string]bool
+}
+
+// NewRegistry builds a registry with the given disabled hook names
+// (HOOKS_DISABLED, comma separated, already split).
+func NewRegistry(disabled []string) *Registry {
+	r := &Registry{disabled: map[string]bool{}}
+	for _, d := range disabled {
+		r.disabled[strings.ToLower(strings.TrimSpace(d))] = true
+	}
+	return r
+}
+
+// Register adds a hook (order of registration = inspection order).
+func (r *Registry) Register(h Hook) {
+	r.hooks = append(r.hooks, h)
+}
+
+// Inspect runs every enabled hook; nil means the request is allowed.
+func (r *Registry) Inspect(req provider.ChatRequest) *Finding {
+	for _, h := range r.hooks {
+		if r.disabled[strings.ToLower(h.Name())] {
+			continue
+		}
+		if f := h.Inspect(req); f != nil {
+			return f
+		}
+	}
+	return nil
+}
+
+// DisabledFrom splits a HOOKS_DISABLED value into names.
+func DisabledFrom(env string) []string {
+	var out []string
+	for _, part := range strings.Split(env, ",") {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}

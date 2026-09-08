@@ -68,12 +68,14 @@ llmberth doctor             # docker/compose, .env completeness, reachability
 llmberth doctor --security  # 12-point audit + Caddy TLS      (M4, v0.4)
 ```
 
-v0.3 (current) adds `usage`, budget alerts and the TUI console. The TUI
-covers Dashboard (health + usage windows + budget), Keys (create/revoke,
-full key shown once) and Logs (streaming with level filter) — and is a pure
-view on the same internal packages the CLI uses, so the two can never drift.
-Caddy TLS + `doctor --security` land in v0.4. See [PLAN.md](../PLAN.md) for
-the milestone map.
+v0.4 (current, in progress) is the security hardening release: `llmberth
+doctor --security` (twelve-item audit), the Caddy TLS prod profile
+(`llmberth up --profile prod`, automatic HTTPS on your domain), a pluggable
+request-inspection layer with a prompt-injection baseline hook, trivy +
+govulncheck + gitleaks in CI for the CLI **and** every generated project —
+see [SECURITY.md](SECURITY.md) for reporting and
+[docs/STRIDE.md](docs/STRIDE.md) for the threat model. See
+[PLAN.md](../PLAN.md) for the milestone map.
 
 ## Architecture
 

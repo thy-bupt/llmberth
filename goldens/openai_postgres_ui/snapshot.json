@@ -13,7 +13,7 @@
   },
   {
     "path": ".github/workflows/ci.yml",
-    "sha256": "a69ff045cf5236b4ef3e582a5eabfdf14aa70f031051562a1e0d0ee33d9097be"
+    "sha256": "07ee17817db71e99e76add4cd67b847588a3ff16e336324aab33fc829b45c0ed"
   },
   {
     "path": ".gitignore",
@@ -57,7 +57,7 @@
   },
   {
     "path": "internal/api/chat.go",
-    "sha256": "3bdd8eddf15168edf3e24f093847dd7d1a901515a5fe1709f7208b1ff7e4f244"
+    "sha256": "c282e675267739018a5f56fde0650f935651aee6868406568a244f8a9ab231e3"
   },
   {
     "path": "internal/api/health.go",
@@ -69,11 +69,11 @@
   },
   {
     "path": "internal/api/server.go",
-    "sha256": "8010ee69c7867b352b925dad6327d493f58d33ae95505cb3ea6aac221846460c"
+    "sha256": "29a8794ea9033852f41dfcfaca48656d7e60dc282a47afa1febc7273ac64aa16"
   },
   {
     "path": "internal/config/config.go",
-    "sha256": "92db69699c09d73dc0bcecc12e5e7e08ab3c1b750ebd24219c2c3030a7153744"
+    "sha256": "afbfaf6ab640f48953f9f14e3fbd6d4694af6faac2a85aa8e033c37fc64a5856"
   },
   {
     "path": "internal/cost/cost.go",
@@ -86,6 +86,18 @@
   {
     "path": "internal/cost/models.yaml",
     "sha256": "cb04ea8276b18f11eb59446b6842e59b010e20c1f99218eda8918c71b56d23b5"
+  },
+  {
+    "path": "internal/hooks/baseline.go",
+    "sha256": "d4ffa9645564afee5f51df08e003d10979386150473aa0cf4af8d0bb853dd483"
+  },
+  {
+    "path": "internal/hooks/hooks.go",
+    "sha256": "b98a5b8fa21e5928067a794f49130580e66a4c692137d3325289928e9d3f30de"
+  },
+  {
+    "path": "internal/hooks/hooks_test.go",
+    "sha256": "53507d0fff06bf21fd4202e8a06b92c581b96ab5a984ccfcae502d8420d319ce"
   },
   {
     "path": "internal/keys/keys.go",
