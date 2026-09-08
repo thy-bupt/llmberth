@@ -1,10 +1,20 @@
 # Gitleaks configuration for llmberth. Default rules apply; the only
-# allowlist entry is the README/CLI example placeholder — never a real
-# credential (plan §5.8: examples carry placeholders only).
+# exclusions are demo/example surfaces, never real code paths:
+#   - cmd/llmberth/init.go and the template README print curl examples with
+#     placeholder auth headers ("Bearer lbt_live_YOUR_API_KEY" and friends).
+#     The curl-auth-header rule matches these whole lines even though the
+#     "secret" is a §5.8 placeholder (no usable credential). Credential
+#     literals in real code are still scanned — by this gate AND by the
+#     doctor --security item 2 regexes, which are stricter.
+#
+# NOTE: with [extend] useDefault = true the allowlist must be declared under
+# [allowlist] (map form); the older [[allowlist]] array form collides with
+# extend and gitleaks fails to load the config.
 [extend]
 useDefault = true
 
-[[allowlist]]
-regexes = [
-  '''Bearer lbt_live_YOUR_API_KEY''',
+[allowlist]
+paths = [
+  '''template/app/README\.md\.tmpl''',
+  '''cmd/llmberth/init\.go''',
 ]
